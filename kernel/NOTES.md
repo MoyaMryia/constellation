@@ -123,6 +123,35 @@ VGA：`Console: colour VGA+ 80x25`，`vgaarb` 正常；`FB_VESA`/`FB_VGA16`
 已编入/构建为模块，但 `-kernel -nographic` 路径无 VESA BIOS，未出现
 `fb0`。fb 实绑留待 syslinux/VESA 或 86Box。
 
+## L3 内存机制（zram + swap，2026-08 回填）
+
+L3 在 L2 上增加：`CONFIG_ZRAM=y`、`CONFIG_ZRAM_BACKEND_LZ4=y`、
+`CONFIG_ZRAM_DEF_COMP_LZ4=y`（默认压缩算法 lz4）。`CONFIG_SWAP` 在 L2
+已开。配置档案：`kernel/configs/6.18.44-L3.config`。
+
+- bzImage：1,589,760 B（1.52 MiB），仍 < 2.5 MiB；较 L2 +12,288 B。
+- `-kernel` + initramfs：`Memory: 18460K/24056K available`
+  （code 2467K, rwdata 644K, rodata 676K, init 244K, bss 212K,
+  reserved 5308K）。
+
+QEMU 验证（`-cpu pentium -m 24`，串口控制台）：
+```
+echo 8388608 > /sys/block/zram0/disksize
+mkswap /dev/zram0
+swapon /dev/zram0
+free
+cat /proc/swaps
+```
+- `zram0: detected capacity change from 0 to 16384`；
+- `Setting up swapspace version 1, size = 8384512 bytes`；
+- `Adding 8188k swap on /dev/zram0`；`free` 显示 `Swap: 8188 0 8188`；
+- `/proc/swaps`：`/dev/zram0 partition 8188 0 -2`。
+- BusyBox 侧同步开启 `MKSWAP`/`SWAPON`/`SWAPOFF`/`FREE`，initramfs
+  符号链接加入对应 applet。
+
+zram 作为 T0 档内存机制的验收路径打通；接下来 L4 用户空间契约
+（s6/BusyBox 所需内核接口）。
+
 ## 备注
 
 - 构建用宿主机 gcc -m32 multilib（`ARCH=i386`），M0 交叉工具链就绪后迁移；

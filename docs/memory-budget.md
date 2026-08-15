@@ -86,10 +86,11 @@ QEMU 6.2 `-cpu pentium -m 24`，L0 = tinyconfig + 串口/init/devtmpfs/proc/sysf
 | L0 | 0.82 MiB（864,768 B） | 20,168 K / 24,056 K（无 initrd 20,280 K） |
 | L1 + MODULES | 1.29 MiB（1,356,288 B） | 19,008 K / 24,056 K |
 | L2 + MODULES，驱动=m | 1.50 MiB（1,577,472 B） | 18,480 K / 24,056 K |
+| L3 + zram(lz4) + swap | 1.52 MiB（1,589,760 B） | 18,460 K / 24,056 K |
 
 早期 6.1 对比数据（L0 多 420 K / L1 多 468 K）保留在 git 历史；6.1 已移除。
 
-**M1 initramfs 快照**：musl i486 静态 BusyBox 1.38.0（197 KiB），
+**M1 initramfs 快照**：musl i486 静态 BusyBox 1.38.0（约 205 KiB），
 initramfs gzip 后约 117 KiB；启动到 shell 后 MemFree ≈ 18.6 MiB，距 24 MiB
 预算还很宽裕。glibc 静态 BusyBox 在 Pentium 上因 i686 基线（CMOV）崩溃，
 用户空间必须用 i486 基线 libc。
@@ -101,3 +102,8 @@ initramfs gzip 后约 117 KiB；启动到 shell 后 MemFree ≈ 18.6 MiB，距 2
 `FB_VGA16` 均为 `m`；`ATA_PIIX`/`BLK_DEV_SD`/`EXT4_FS` 保持内置。
 QEMU 下 `insmod` 8390 + ne2k-pci 后识别 `eth0`；BusyBox 带
 `insmod`/`rmmod`/`lsmod`/`modprobe`。fb 实绑待 86Box/VESA。
+
+**L3 内存机制快照（2026-08）**：`ZRAM=y` + `ZRAM_BACKEND_LZ4=y` +
+`ZRAM_DEF_COMP_LZ4=y`。QEMU 下 `echo 8388608 > /sys/block/zram0/disksize`
++ `mkswap /dev/zram0` + `swapon /dev/zram0` 成功，`free` 显示
+`Swap: 8188 0 8188`。BusyBox 已带 `mkswap`/`swapon`/`swapoff`/`free`。
