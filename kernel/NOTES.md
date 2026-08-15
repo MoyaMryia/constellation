@@ -119,6 +119,17 @@ QEMU 模块加载验证：
   依赖并成功；生产环境建议先 `depmod` 或按依赖顺序 `insmod`。
 - ISA NE2000 模块 `ne.ko` 与 PCMCIA `pcnet_cs.ko` 已构建，留待真机/86Box。
 
+模块构建与安装：
+```
+make ARCH=i386 -j16 modules
+make ARCH=i386 INSTALL_MOD_PATH=$PWD/../../build/modroot modules_install
+```
+安装后布局：`build/modroot/lib/modules/6.18.44/kernel/drivers/...`
+（含 `modules.dep`/`modules.alias` 等；目录不入库，镜像生成时装入 rootfs
+的 `/lib/modules/6.18.44`）。依赖示例：
+`ne2k-pci.ko -> 8390.ko`；`pcnet_cs.ko -> pcmcia.ko, pcmcia_core.ko,
+8390.ko`。
+
 VGA：`Console: colour VGA+ 80x25`，`vgaarb` 正常；`FB_VESA`/`FB_VGA16`
 已编入/构建为模块，但 `-kernel -nographic` 路径无 VESA BIOS，未出现
 `fb0`。fb 实绑留待 syslinux/VESA 或 86Box。
