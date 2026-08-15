@@ -179,6 +179,39 @@ bzImage → libata/IDE → DOS 分区 → ext4 root → BusyBox PID 1**。
 器" 的决策；仅当未来出现多种互斥硬件变体、按需加载省下的驱动常驻明显
 大于 144 K 时才值得重新评估。
 
+## L2 外设（2026-08 起只做 6.18）
+
+策略更新：L0/L1 已量化 6.1 与 6.18 的差距（年代红利 420 K / 468 K，均远
+低于 2 MiB 阈值）。**L2 起先只做 6.18**：6.18 能开就先全流程跑通，6.1
+暂时冻结在 L1；若后续 6.18 在外设层遇到无法接受的成本，再回退补做 6.1。
+
+配置档案：`kernel/configs/6.18.44-L2.config`（基于 L1 增加）：
+- 16 位 PCMCIA：`PCCARD`、`PCMCIA`、`I82365`（参考机型为 i82365 兼容
+  ISA 桥；`I82365` 依赖 `ISA`，故补开 `ISA`）；
+- 网络：`NET` + `NETDEVICES` + `ETHERNET`；8390 家族 `NE2000`（ISA）、
+  `NE2K_PCI`（PCI，QEMU 可测）、`PCMCIA_PCNET`（PCMCIA，留待 86Box/真机）；
+- VGA fb：`FB` + `FB_VESA` + `FB_VGA16`。
+
+### 构建与 QEMU 冒烟（仅 6.18.44）
+
+- bzImage：1,548,800 B（1.48 MiB），仍 < 2.5 MiB；较 L1 +245,760 B。
+- `-kernel` + initramfs：`Memory: 18580K/24056K available`
+  （code 2479K, rwdata 650K, rodata 540K, init 248K, bss 216K,
+  reserved 5188K）。
+
+QEMU 验证（`-cpu pentium -m 24`，串口控制台）：
+- `-nic model=ne2k_pci`：`ne2k-pci 0000:00:03.0 eth0: RealTek
+  RTL-8029(AS) found at 0xc000, IRQ 11` —— PCI NE2000 驱动正常。
+- `-netdev user,id=n1 -device ne2k_isa,netdev=n1`：
+  `ne ne.0 eth0: NE2000 found at 0x300, using IRQ 9`；同时
+  `Intel ISA PCIC probe:` 出现（i82365 驱动完成 probe，QEMU 无该设备）。
+- VGA：`Console: colour VGA+ 80x25`，`vgaarb` 正常；`FB_VESA`/`FB_VGA16`
+  已编入内核，但 `-kernel -nographic` 路径下无 VESA BIOS，未出现 `fb0`。
+  fb 实绑留待 syslinux/VESA 或 86Box 验证。
+- syslinux 全链路复测通过：`-boot c` 不传 `-kernel`/`-initrd`，
+  SYSLINUX 加载 1.48 MiB 的 L2 bzImage，ext4 root 挂载成功，
+  `Memory: 18692K/24056K available`（无 initrd），BusyBox 落到 ash。
+
 ## 备注
 
 - 构建用宿主机 gcc -m32 multilib（`ARCH=i386`），M0 交叉工具链就绪后迁移；

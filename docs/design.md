@@ -322,7 +322,7 @@ Constellation 的威胁模型：**单用户、爱好者机器、常离线或位�
 | D7 | 是否增设 TX 极限档（16 MiB，CLI-only，重度 swap） | M1/M2 实测 16 MiB 可用性后决策，见 memory-budget.md §3.1 |
 | D8 | LTS 间隔具体定几年（3–5 年的判据：新版收益是否值得老机器重装） | 首个 LTS 发布后根据维护实况校准 |
 | D9 | 内核是否裁掉 IPv6（省内存与镜像体积 vs 现代网络环境的可达性） | M1 裁剪实验时评估：量化 IPv6 的常驻开销后再定 |
-| D10 | 首个 LTS 的内核 vintage：6.18（上游覆盖最长）vs 6.1/6.6（体积更小但早进自维护） | **L0/L1 已回填（2026-08）**：同一份 tinyconfig+增量清单下，6.1 比 6.18 多 420 K（L0）/ 468 K（L1）用户态内存，均低于 2 MiB 阈值；若 L2–L4 不反转则选 **6.18**。数据见 kernel/NOTES.md |
+| D10 | 首个 LTS 的内核 vintage：6.18（上游覆盖最长）vs 6.1/6.6（体积更小但早进自维护） | **L0/L1 已回填（2026-08）**：同一份 tinyconfig+增量清单下，6.1 比 6.18 多 420 K（L0）/ 468 K（L1）用户态内存，均低于 2 MiB 阈值。**已定：L2 起先只做 6.18**，6.1 冻结在 L1；若 6.18 外设层出现不可接受成本再回退补做。数据见 kernel/NOTES.md |
 | D11 | 目标系统是否需要包管理器 | **已定：保留 apk**。常驻内存为零（非守护进程，仅操作期峰值 2–3 MiB），磁盘成本 ~数 MB；换回：用户改装权、周期内按包投递安全修复（慢网慢盘下数量级地便宜于整刷镜像）、与 §5 归档流水线自洽。约束：基础系统必须自洽完整——从不碰 apk 也能完整使用，包管理器是增益不是依赖 |
 
 验证环境：86Box（精确模拟 Pentium 133 + 24/40 MiB）为主要 CI 目标，
@@ -335,8 +335,11 @@ QEMU（-cpu 486/pentium, -m 24/40）为快速回归环境，最终真机确认�
   **已跑通**（2026-08）：6.1.182 / 6.18.44 + musl i486 静态 BusyBox 1.38.0，
   QEMU `-cpu pentium -m 24` 落到 ash；L1 内核层（IDE/libata/ext4 + DOS 分区）
   已 QEMU 验证；**syslinux 引导链已跑通**：BIOS → MBR → SYSLINUX → bzImage
-  → ext4 root → BusyBox PID 1（见 kernel/NOTES.md）。下一步 L2 外设
-  （PCMCIA/NE2000/VGA fb）。
+  → ext4 root → BusyBox PID 1（见 kernel/NOTES.md）。
+  **L2 外设已开工（2026-08，仅 6.18.44）**：`PCCARD`/`PCMCIA`/`I82365`、
+  8390 家族（`NE2000`/`NE2K_PCI`/`PCMCIA_PCNET`）、`FB`/`FB_VESA`/
+  `FB_VGA16` 已编入；QEMU 下 NE2K PCI/ISA 网卡均识别到 `eth0`，
+  i82365 完成 probe，fb 实绑待 86Box/VESA 路径。
 - **M2 最小系统**：musl + s6 + apk + 基础仓库（~30 包），硬盘安装形态可用，
   出 T0 实测需求表。
 - **M3 网络与包生态**：PCMCIA 有线网络、udhcpc、远程 apk 仓库，包数 ~100。

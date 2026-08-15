@@ -106,3 +106,9 @@ L1 年代红利 468 K（6.1 更多），仍低于 D10 阈值；内核常驻仍�
 6–8 MiB 区间内。对照实验：仅开 `CONFIG_MODULES`（驱动仍全内置）使
 6.18.44 用户态可用内存少 144 K、bzImage 增 52 KiB——固定硬件下全内置
 比模块化更省。
+
+**L2 外设快照（2026-08，仅 6.18.44，详见 kernel/NOTES.md）**：L1 基础上
+增加 `PCCARD`/`PCMCIA`/`I82365`、8390 家族网卡（`NE2000`/`NE2K_PCI`/
+`PCMCIA_PCNET`）、`FB`/`FB_VESA`/`FB_VGA16`。bzImage 1,548,800 B
+（1.48 MiB），仍 < 2.5 MiB；`Memory: 18580K/24056K available`。QEMU 下
+NE2K PCI/ISA 均识别 `eth0`，i82365 完成 probe；fb 实绑待 86Box/VESA。

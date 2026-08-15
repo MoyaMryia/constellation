@@ -44,4 +44,5 @@ musl i486 静态 BusyBox initramfs，QEMU 24 MiB 启动到 shell（见
 [kernel/NOTES.md](kernel/NOTES.md) 与 [busybox/NOTES.md](busybox/NOTES.md)）；
 **L1 内核层 + syslinux 引导已跑通**：IDE/libata + ext4 + DOS 分区，
 BIOS → MBR → SYSLINUX → bzImage → ext4 root → BusyBox PID 1（见
-kernel/NOTES.md）。尚无可用安装镜像。
+kernel/NOTES.md）。**L2 外设已开工（仅 6.18.44）**：PCMCIA/i82365、
+8390 网卡（NE2K PCI/ISA 已识别 eth0）、VGA fb 已编入。尚无可用安装镜像。
