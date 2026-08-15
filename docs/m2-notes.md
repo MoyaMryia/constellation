@@ -46,5 +46,8 @@
 
 ## 下一步
 
-- apk-tools：静态 i486 musl 移植，或评估旧版 2.x 是否更易构建。
+- apk-tools 已开始（build/apk-src v3.0.7，meson 1.2 装于 build/pip-meson）；
+  zlib 1.2.11 / mbedtls 2.28 / openssl 3.0.2 静态依赖已装入 build/crossdeps，
+  源码已 patch mbedtls 分支与 crypto_mbedtls.c 的 2.x 兼容问题。
+  剩余阻塞：libfetch 的 TLS/链接（网络非当前重点，暂缓）。
 - 磁盘镜像脚本化（`mkimage`）：把 rootfs、模块、内核、syslinux 自动打成可启动磁盘。

@@ -30,6 +30,13 @@ Constellation OS 是一个面向老旧 x86 硬件的 Linux 发行版项目。其
    撤退；撤退也按章程来（冻结最后可用版本、留档、明确告示），不搞突然死亡。
    详见 [docs/design.md](docs/design.md) §3.5。
 
+## 品牌资源
+
+- [assets/logo.svg](assets/logo.svg) / [assets/logo.png](assets/logo.png) — 拼色 `*` 号主标识
+- [assets/fastfetch.txt](assets/fastfetch.txt) — fastfetch 终端字符画 logo（明暗渐变风格，ANSI truecolor），
+  用法：`fastfetch --logo assets/fastfetch.txt`，或在 config.jsonc 中设
+  `"logo": { "source": "/path/to/assets/fastfetch.txt" }`
+
 ## 文档
 
 - [docs/design.md](docs/design.md) — 总体设计文档（选型论证、架构基线、路线图）
