@@ -84,10 +84,12 @@ IBM ThinkPad 365X / 365XD：
   - 启动后内核常驻（`/proc/meminfo` 基线，含页表/驱动）≤ 8 MiB @ 24 MiB 机型。
 - **裁剪清单**（按收益从大到小）：
   - 只保留参考机型硬件：IDE/libata、16 位 PCMCIA、NE2000 兼容网卡、
-    VGA 帧缓冲——**驱动默认全内置，但保留模块加载器**（`CONFIG_MODULES`
-    + `CONFIG_MODULE_UNLOAD`），让用户/维护者可以按需 `insmod`/`modprobe`
-    额外驱动；模块基础设施成本已量化：L1 上少 144 K 用户态可用内存、
-    bzImage 增 52 KiB（kernel/NOTES.md），在 24 MiB 预算内可接受；
+    VGA 帧缓冲——**启动必需驱动全内置，非启动必需驱动编成模块**
+    （`CONFIG_MODULES` + `CONFIG_MODULE_UNLOAD`）。内置：`ATA_PIIX`、
+    `BLK_DEV_SD`、`EXT4_FS`；模块：PCMCIA 栈、8390 网卡、VGA16 fb 等。
+    模块基础设施成本已量化：约 144 K 用户态可用内存 + 52 KiB bzImage
+    （kernel/NOTES.md），在 24 MiB 预算内可接受，换来用户可
+    `insmod`/`modprobe` 额外驱动；
   - 文件系统只留 ext4 + proc/sysfs/tmpfs（initrd 以外一切可裁）；
   - 关调试全家桶：SLUB debug、KASAN、kprobes/ftrace/perf、eBPF 大半、
     内核态 Rust（若该 LTS 含）；
@@ -102,21 +104,19 @@ IBM ThinkPad 365X / 365XD：
 - **裁剪配置的维护成本极低**：老硬件的驱动需求是冻结的，每次跨 LTS 迁移
   .config 只做一次 `oldconfig` 差异审查——这与 §5 长周期 LTS 模型咬合：
   几年才迁一次。
-- **vintage 选择：新 LTS vs 最旧维护中 LTS**（2026-08 核实 kernel.org）：
+- **vintage 选择：已定 6.18 LTS**（2026-08 核实 kernel.org）：
 
-  | LTS | 预计 EOL | 备注 |
+  | LTS | 预计 EOL | 状态 |
   |---|---|---|
-  | 5.10 / 5.15 | 2026-12 | 即将 EOL，不满足 §5 条件 1，排除 |
-  | 6.1 / 6.6 | 2027-12 | 体积更小，但早 ~2 年进入自维护期 |
-  | 6.12 / 6.18 | 2028-12 | 上游覆盖最长，体积略大 |
+  | 5.10 / 5.15 | 2026-12 | 即将 EOL，排除 |
+  | 6.1 / 6.6 | 2027-12 | 已做 L0/L1 对比后移除 |
+  | 6.12 / 6.18 | 2028-12 | **选用 6.18**，上游覆盖最长 |
 
   权衡要点：Constellation 自身 LTS 周期 3–5 年，**任何上游 LTS 都会在
-  周期中段 EOL**，自维护不可避免；选旧 LTS 是拿"自维护负担提前"换
-  "常驻内存更小"（年代红利）。且 5.x/6.x 全系仍含 `M486`——**基准钉在
-  ≤6.x 期间 `linux-legacy486` 风味暂缓**，D1 危机推迟到首个 7.x 基准。
-  → M1 裁剪实验 L0/L1 已回填：L0 年代红利 420 K，L1 为 468 K（均为
-  6.1 更多），均低于 2 MiB 阈值；若 L2–L4 数据不反转，D10 倾向 6.18，
-  详见 kernel/NOTES.md。
+  周期中段 EOL**，自维护不可避免。M1 裁剪实验 L0/L1 已回填：6.1 比
+  6.18 多 420 K（L0）/ 468 K（L1）用户态内存，均低于 2 MiB 阈值；
+  按"上游覆盖最长"原则选定 **6.18.44**，6.1 配置已从仓库移除。
+  5.x/6.x 全系仍含 `M486`——真 486 由 `linux-legacy486` 风味承接。
 - **EOL 接力链（内核）**：内核 EOL 是预期事件（任何 vintage 都会在我们
   3–5 年周期中段 EOL），按以下顺序接力：
   1. **扩展维护生态**：CIP SLTS（如 6.1-cip 维护至 ~2033）、发行版长期
@@ -322,7 +322,7 @@ Constellation 的威胁模型：**单用户、爱好者机器、常离线或位�
 | D7 | 是否增设 TX 极限档（16 MiB，CLI-only，重度 swap） | M1/M2 实测 16 MiB 可用性后决策，见 memory-budget.md §3.1 |
 | D8 | LTS 间隔具体定几年（3–5 年的判据：新版收益是否值得老机器重装） | 首个 LTS 发布后根据维护实况校准 |
 | D9 | 内核是否裁掉 IPv6（省内存与镜像体积 vs 现代网络环境的可达性） | M1 裁剪实验时评估：量化 IPv6 的常驻开销后再定 |
-| D10 | 首个 LTS 的内核 vintage：6.18（上游覆盖最长）vs 6.1/6.6（体积更小但早进自维护） | **L0/L1 已回填（2026-08）**：同一份 tinyconfig+增量清单下，6.1 比 6.18 多 420 K（L0）/ 468 K（L1）用户态内存，均低于 2 MiB 阈值。**已定：L2 起先只做 6.18**，6.1 冻结在 L1；若 6.18 外设层出现不可接受成本再回退补做。数据见 kernel/NOTES.md |
+| D10 | 首个 LTS 的内核 vintage：6.18（上游覆盖最长）vs 6.1/6.6（体积更小但早进自维护） | **已定（2026-08）：6.18.44**。6.1 对比数据：L0 多 420 K / L1 多 468 K 用户态内存，均低于 2 MiB 阈值；6.1 配置已移除，仓库只保留 6.18。数据见 kernel/NOTES.md |
 | D11 | 目标系统是否需要包管理器 | **已定：保留 apk**。常驻内存为零（非守护进程，仅操作期峰值 2–3 MiB），磁盘成本 ~数 MB；换回：用户改装权、周期内按包投递安全修复（慢网慢盘下数量级地便宜于整刷镜像）、与 §5 归档流水线自洽。约束：基础系统必须自洽完整——从不碰 apk 也能完整使用，包管理器是增益不是依赖 |
 
 验证环境：86Box（精确模拟 Pentium 133 + 24/40 MiB）为主要 CI 目标，
@@ -332,14 +332,14 @@ QEMU（-cpu 486/pentium, -m 24/40）为快速回归环境，最终真机确认�
 
 - **M0 工具链**：交叉工具链 + Hello World 静态二进制在 86Box 目标上运行。
 - **M1 可引导核心**：精简 LTS 内核 + BusyBox initramfs，24 MiB 内存启动到 shell。
-  **已跑通**（2026-08）：6.1.182 / 6.18.44 + musl i486 静态 BusyBox 1.38.0，
+  **已跑通**（2026-08）：6.18.44 + musl i486 静态 BusyBox 1.38.0，
   QEMU `-cpu pentium -m 24` 落到 ash；L1 内核层（IDE/libata/ext4 + DOS 分区）
   已 QEMU 验证；**syslinux 引导链已跑通**：BIOS → MBR → SYSLINUX → bzImage
   → ext4 root → BusyBox PID 1（见 kernel/NOTES.md）。
   **L2 外设已开工（2026-08，仅 6.18.44）**：`PCCARD`/`PCMCIA`/`I82365`、
   8390 家族（`NE2000`/`NE2K_PCI`/`PCMCIA_PCNET`）、`FB`/`FB_VESA`/
-  `FB_VGA16` 已编入；QEMU 下 NE2K PCI/ISA 网卡均识别到 `eth0`，
-  i82365 完成 probe，fb 实绑待 86Box/VESA 路径。
+  `FB_VGA16` 已编入；**非启动必需驱动已改为 `m`**，QEMU 下 `insmod`
+  ne2k-pci 后识别 `eth0`；fb 实绑待 86Box/VESA 路径。
 - **M2 最小系统**：musl + s6 + apk + 基础仓库（~30 包），硬盘安装形态可用，
   出 T0 实测需求表。
 - **M3 网络与包生态**：PCMCIA 有线网络、udhcpc、远程 apk 仓库，包数 ~100。

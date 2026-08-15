@@ -77,39 +77,27 @@ Constellation 的失败，而是坐标系上另一个合法的极端点。
 - [ ] zram 压力下交互延迟主观评估
 - [ ] 回填本表并签发 T0 正式需求表
 
-### 4.1 L0 实测快照（2026-08，详见 kernel/NOTES.md）
+### 4.1 实测快照（2026-08，仅 6.18.44，详见 kernel/NOTES.md）
 
 QEMU 6.2 `-cpu pentium -m 24`，L0 = tinyconfig + 串口/init/devtmpfs/proc/sysfs：
 
-| vintage | bzImage（XZ） | 用户态可用内存 @24M |
+| 层级 | bzImage（XZ） | 内核可用内存（`Memory:` 行，带 initramfs） |
 |---|---|---|
-| 6.1.182 | 0.76 MiB（799,232 B） | 20,700 K |
-| 6.18.44 | 0.82 MiB（864,768 B） | 20,280 K |
+| L0 | 0.82 MiB（864,768 B） | 20,168 K / 24,056 K（无 initrd 20,280 K） |
+| L1 + MODULES | 1.29 MiB（1,356,288 B） | 19,008 K / 24,056 K |
+| L2 + MODULES，驱动=m | 1.50 MiB（1,577,472 B） | 18,480 K / 24,056 K |
 
-年代红利约 420 K，低于 D10 的 2 MiB 阈值，D10 暂倾向 6.18。内核常驻明细与
-M686 choice 坑见 kernel/NOTES.md。
+早期 6.1 对比数据（L0 多 420 K / L1 多 468 K）保留在 git 历史；6.1 已移除。
 
-**M1 initramfs 快照（同上环境）**：musl i486 静态 BusyBox 1.38.0
-（193 KiB），initramfs gzip 后 114 KiB；启动到 shell 后 MemFree ≈ 18.6 MiB
-（6.1 18,672 kB / 6.18 18,676 kB），距 24 MiB 预算还很宽裕。glibc 静态
-BusyBox 在 Pentium 上因 i686 基线（CMOV）崩溃，用户空间必须用 i486 基线 libc。
+**M1 initramfs 快照**：musl i486 静态 BusyBox 1.38.0（197 KiB），
+initramfs gzip 后约 117 KiB；启动到 shell 后 MemFree ≈ 18.6 MiB，距 24 MiB
+预算还很宽裕。glibc 静态 BusyBox 在 Pentium 上因 i686 基线（CMOV）崩溃，
+用户空间必须用 i486 基线 libc。
 
-**L1 存储/引导快照（2026-08，详见 kernel/NOTES.md）**：L0 基础上开启
-`BLOCK`/`PCI`/libata(`ATA_PIIX`)/`BLK_DEV_SD`/`EXT4_FS`。QEMU 同一环境：
-
-| vintage | bzImage（XZ） | 内核可用内存（`Memory:` 行，带 initramfs） | 磁盘 ext4 root（无 initramfs） |
-|---|---|---|---|
-| 6.1.182 | 1.16 MiB（1,221,120 B） | 19,620 K / 24,056 K | `Memory: 19732K/24056K`，ext4 挂载成功，`/bin/sh` 启动 |
-| 6.18.44 | 1.29 MiB（1,356,288 B） | 19,008 K / 24,056 K | 已开 `CONFIG_MODULES`；ext4 root 验证见 kernel/NOTES.md |
-
-L1 年代红利（同清单口径，均为无 MODULES 时）468 K（6.1 更多），仍低于
-D10 阈值。**模块策略（2026-08 更新）：保留模块加载器**——`CONFIG_MODULES`
-+ `CONFIG_MODULE_UNLOAD` 的成本约 144 K 用户态内存 + 52 KiB bzImage，
-在 24 MiB 预算内可接受；用户可 `insmod`/`modprobe` 额外驱动。
-
-**L2 外设快照（2026-08，仅 6.18.44，详见 kernel/NOTES.md）**：L1 基础上
-增加 `PCCARD`/`PCMCIA`/`I82365`、8390 家族网卡（`NE2000`/`NE2K_PCI`/
-`PCMCIA_PCNET`）、`FB`/`FB_VESA`/`FB_VGA16`，并保留模块加载器。bzImage
-1,614,336 B（1.54 MiB），仍 < 2.5 MiB；`Memory: 18404K/24056K available`。
-QEMU 下 NE2K PCI/ISA 均识别 `eth0`，i82365 完成 probe；BusyBox 已带
-`insmod`/`rmmod`/`lsmod`/`modprobe` 符号链接；fb 实绑待 86Box/VESA。
+**模块策略（2026-08）：保留模块加载器，非启动必需驱动改为 `m`。**
+`CONFIG_MODULES` + `CONFIG_MODULE_UNLOAD` 成本约 144 K 用户态内存 +
+52 KiB bzImage，在 24 MiB 预算内可接受。L2 中
+`PCCARD`/`PCMCIA`/`I82365`、`NE2000`/`NE2K_PCI`/`PCMCIA_PCNET`、
+`FB_VGA16` 均为 `m`；`ATA_PIIX`/`BLK_DEV_SD`/`EXT4_FS` 保持内置。
+QEMU 下 `insmod` 8390 + ne2k-pci 后识别 `eth0`；BusyBox 带
+`insmod`/`rmmod`/`lsmod`/`modprobe`。fb 实绑待 86Box/VESA。

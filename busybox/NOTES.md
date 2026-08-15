@@ -59,9 +59,8 @@ QEMU 6.2 `-cpu pentium -m 24`，`console=ttyS0,115200`：
 - initramfs.cpio.gz：117,490 B
 - BusyBox：201,940 B（无 CMOV/SSE 等 i686+ 指令；已带模块工具）
 - 6.18.44：`Memory: 20168K/24056K`，`MemTotal 20752 kB`，`MemFree 18676 kB`
-- 6.1.182：`Memory: 20588K/24056K`，`MemTotal 20884 kB`，`MemFree 18672 kB`
 
-两个 vintage 均成功落到 ash 提示符，输入回显正常（见 kernel/NOTES.md）。
+6.18.44 成功落到 ash 提示符，输入回显正常（见 kernel/NOTES.md）。
 
 ### 直接以 BusyBox 为 PID 1 的冒烟测试（2026-08）
 
@@ -74,7 +73,7 @@ qemu-system-i386 -m 24 -cpu pentium \
   -append 'console=ttyS0,115200 panic=-1 rdinit=/bin/sh'
 ```
 
-- 6.1.182 与 6.18.44 均成功：内核打印 `Run /bin/sh as init process`，
+- 6.18.44 成功：内核打印 `Run /bin/sh as init process`，
   BusyBox ash 作为 PID 1 输出提示符；手动执行
   `mount -t proc proc /proc`、`uname -a`、`poweroff -f` 均正常。
 - 注意：`rdinit=/bin/sh` 会绕过 `initramfs/init`，proc/sysfs/devtmpfs

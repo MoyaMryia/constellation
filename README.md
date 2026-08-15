@@ -39,11 +39,12 @@ Constellation OS 是一个面向老旧 x86 硬件的 Linux 发行版项目。其
 
 ## 状态
 
-早期设计阶段。**M1 可引导核心已跑通**：精简 LTS 内核（6.1.182 / 6.18.44）+
+早期设计阶段。**M1 可引导核心已跑通**：精简 LTS 内核（6.18.44）+
 musl i486 静态 BusyBox initramfs，QEMU 24 MiB 启动到 shell（见
 [kernel/NOTES.md](kernel/NOTES.md) 与 [busybox/NOTES.md](busybox/NOTES.md)）；
 **L1 内核层 + syslinux 引导已跑通**：IDE/libata + ext4 + DOS 分区，
 BIOS → MBR → SYSLINUX → bzImage → ext4 root → BusyBox PID 1（见
 kernel/NOTES.md）。**L2 外设已开工（仅 6.18.44）**：PCMCIA/i82365、
-8390 网卡（NE2K PCI/ISA 已识别 eth0）、VGA fb 已编入；**内核保留模块
-加载器，BusyBox 带 insmod/rmmod/lsmod/modprobe**。尚无可用安装镜像。
+8390 网卡（`NE2K_PCI` 等已改为模块并验证 `insmod` 后识别 `eth0`）、
+VGA fb 已编入/构建为模块；**内核保留模块加载器，BusyBox 带
+insmod/rmmod/lsmod/modprobe**。尚无可用安装镜像。
