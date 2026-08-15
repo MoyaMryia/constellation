@@ -93,3 +93,14 @@ M686 choice 坑见 kernel/NOTES.md。
 （193 KiB），initramfs gzip 后 114 KiB；启动到 shell 后 MemFree ≈ 18.6 MiB
 （6.1 18,672 kB / 6.18 18,676 kB），距 24 MiB 预算还很宽裕。glibc 静态
 BusyBox 在 Pentium 上因 i686 基线（CMOV）崩溃，用户空间必须用 i486 基线 libc。
+
+**L1 存储/引导快照（2026-08，详见 kernel/NOTES.md）**：L0 基础上开启
+`BLOCK`/`PCI`/libata(`ATA_PIIX`)/`BLK_DEV_SD`/`EXT4_FS`。QEMU 同一环境：
+
+| vintage | bzImage（XZ） | 内核可用内存（`Memory:` 行，带 initramfs） | 磁盘 ext4 root（无 initramfs） |
+|---|---|---|---|
+| 6.1.182 | 1.16 MiB（1,221,120 B） | 19,620 K / 24,056 K | `Memory: 19732K/24056K`，ext4 挂载成功，`/bin/sh` 启动 |
+| 6.18.44 | 1.24 MiB（1,303,040 B） | 19,152 K / 24,056 K | `Memory: 19264K/24056K`，ext4 挂载成功，`/bin/sh` 启动 |
+
+L1 年代红利 468 K（6.1 更多），仍低于 D10 阈值；内核常驻仍落在 T0 预算
+6–8 MiB 区间内。

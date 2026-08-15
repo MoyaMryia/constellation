@@ -94,6 +94,54 @@ QEMU 6.2 `-cpu pentium -m 24`，串口控制台，`console=ttyS0,115200`。
   （含 `cmove`），在 `-cpu pentium` 上 init 崩溃；本项目用户空间基线是
   i486，必须用 musl（或其它 i486 基线 libc），M0 交叉工具链应基于 musl。
 
+## L1 存储/引导（IDE + ext4，2026-08 回填）
+
+L1 在 L0 基础上增加：`CONFIG_BLOCK`、`CONFIG_PCI`、libata
+（`CONFIG_ATA` + `CONFIG_ATA_PIIX`，QEMU 与参考机型同为 Intel PIIX 系）、
+`CONFIG_BLK_DEV_SD`、`CONFIG_EXT4_FS`。分区表支持由 `CONFIG_BLOCK` 带入
+`CONFIG_MSDOS_PARTITION`。配置档案：`kernel/configs/6.1.182-L1.config`、
+`6.18.44-L1.config`。
+
+### 构建与内存
+
+QEMU 6.2 `-cpu pentium -m 24`，`console=ttyS0,115200`，`-kernel` + `-initrd`
+冒烟（同一份 initramfs）：
+
+| vintage | bzImage（XZ） | 内核可用内存（`Memory:` 行） | 内核明细 | 备注 |
+|---|---|---|---|---|
+| 6.1.182 | 1,221,120 B（1.16 MiB） | 19,620 K / 24,056 K | code 1880K, rwdata 630K, rodata 412K, init 212K, bss 248K, reserved 4436K | ata_piix 识别硬盘，启动到 shell |
+| 6.18.44 | 1,303,040 B（1.24 MiB） | 19,152 K / 24,056 K | code 2035K, rwdata 637K, rodata 440K, init 240K, bss 208K, reserved 4616K | 同上 |
+
+- L1 年代红利：**468 K**（6.1 比 6.18 多 468 K 可用内存），仍远低于 D10
+  的 2 MiB 阈值；D10 继续倾向 6.18。
+- bzImage 较 L0 增量：6.1 +421,888 B；6.18 +438,272 B。两树仍 < 2.5 MiB。
+
+### IDE 磁盘 + ext4 root 验证（无 initramfs）
+
+构造 64 MiB 磁盘镜像：`sfdisk` 建 DOS 分区表（一个 Linux 分区），
+`mkfs.ext4 -d` 灌入 BusyBox rootfs，并用 `debugfs` 补 `/dev/console`
+字符设备（宿主非 root 无法 `mknod`/`mount -o loop`，用 `debugfs` 绕过）。
+
+启动参数：
+
+```
+qemu-system-i386 -m 24 -cpu pentium \
+  -kernel kernel/src/linux-6.18/arch/x86/boot/bzImage \
+  -drive file=/tmp/l1-disk.img,if=ide,format=raw \
+  -nographic -no-reboot \
+  -append 'console=ttyS0,115200 panic=-1 root=/dev/sda1 rootfstype=ext4 init=/bin/sh'
+```
+
+- 6.1.182：`Memory: 19732K/24056K available`；`EXT4-fs (sda1): mounted
+  filesystem with ordered data mode`；`Run /bin/sh as init process`，落到
+  BusyBox ash。
+- 6.18.44：`Memory: 19264K/24056K available`；`EXT4-fs (sda1): mounted
+  filesystem ... ro with ordered data mode`；同样落到 ash。
+- 两个 vintage 均成功：`sda: sda1`（DOS 分区表解析正常）→ ext4 root 挂载
+  → BusyBox 作为 PID 1。IDE + ext4 内核路径在 QEMU 上打通。
+- 未做：syslinux/extlinux 引导扇区验证（宿主 loop mount 权限/引导器安装留到
+  后续）；QEMU 下用 `-kernel` 跳过 bootloader，专注验证内核驱动链。
+
 ## 备注
 
 - 构建用宿主机 gcc -m32 multilib（`ARCH=i386`），M0 交叉工具链就绪后迁移；
