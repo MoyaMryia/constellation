@@ -43,10 +43,26 @@
 
 ## 实测数据（回填）
 
-| vintage | 层级 | bzImage | MemTotal @24M | 备注 |
-|---|---|---|---|---|
-| 6.1.182 | L0 | | | |
-| 6.18.44 | L0 | | | |
+环境：QEMU 6.2 `-cpu pentium -m 24`，串口控制台，L0 = tinyconfig +
+串口/init/devtmpfs/proc/sysfs，CPU 均为 Pentium Classic（M586TSC）。
+
+| vintage | 层级 | bzImage | 用户态可用内存 @24M | 内核明细 | 备注 |
+|---|---|---|---|---|---|
+| 6.1.182 | L0 | 0.76 MiB（799,232 B，默认压缩） | **20,700 K / 24,056 K** | code 1178K, rwdata 561K, rodata 248K, init 184K, bss 244K, reserved 3356K | 启动正常，panic 仅为无 init（预期） |
+| 6.18.44 | L0 | 0.82 MiB（864,768 B，默认压缩） | **20,280 K / 24,056 K** | code 1324K, rwdata 556K, rodata 272K, init 192K, bss 204K, reserved 3496K | 同上 |
+
+**L0 年代红利：420 K（6.1 比 6.18 多出 420K 用户态可用内存）**——远低于
+D10 的 2 MiB 阈值。若 L1–L4 数据不反转，D10 倾向 **6.18**（上游维护窗口
+多约 2 年）。bzImage 两者均远低于 2.5 MiB 目标（尚未换 XZ，换了更小）。
+
+### 过程记录
+
+- 6.1：`make tinyconfig` 的默认 CPU 选择即兼容 Pentium，直接可建；
+- 6.18：tinyconfig 默认 `M686`，`scripts/config --enable M586TSC` 无效
+  （Kconfig choice 需先 `--disable M686`），症状为 bzImage 启动即拒绝
+  （"requires an i686 CPU"）——修复后正常。此坑已记录，后续层级配置
+  注意 choice 类符号的改法；
+- 两个树均在 16 线程宿主机上 ~2 分钟完成 L0 构建，迭代成本可忽略。
 
 ## 备注
 
