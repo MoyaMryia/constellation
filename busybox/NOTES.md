@@ -59,3 +59,22 @@ QEMU 6.2 `-cpu pentium -m 24`，`console=ttyS0,115200`：
 - 6.1.182：`Memory: 20588K/24056K`，`MemTotal 20884 kB`，`MemFree 18672 kB`
 
 两个 vintage 均成功落到 ash 提示符，输入回显正常（见 kernel/NOTES.md）。
+
+### 直接以 BusyBox 为 PID 1 的冒烟测试（2026-08）
+
+不经过 `/init` 脚本，直接让内核把 BusyBox 的 `sh` 符号链接作为 init 执行：
+
+```
+qemu-system-i386 -m 24 -cpu pentium \
+  -kernel kernel/src/linux-6.18/arch/x86/boot/bzImage \
+  -initrd build/initramfs.cpio.gz -nographic -no-reboot \
+  -append 'console=ttyS0,115200 panic=-1 rdinit=/bin/sh'
+```
+
+- 6.1.182 与 6.18.44 均成功：内核打印 `Run /bin/sh as init process`，
+  BusyBox ash 作为 PID 1 输出提示符；手动执行
+  `mount -t proc proc /proc`、`uname -a`、`poweroff -f` 均正常。
+- 注意：`rdinit=/bin/sh` 会绕过 `initramfs/init`，proc/sysfs/devtmpfs
+  不会自动挂载；完整启动仍走 `rdinit=/init`（默认）。
+- `poweroff -f` 在 6.18 上提示 `Power off not available: System halted
+  instead`（无 ACPI/PM 时预期行为），用 `halt -f` 或让 QEMU 超时结束即可。
