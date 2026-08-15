@@ -158,7 +158,9 @@ IBM ThinkPad 365X / 365XD：
 2. **极简 X**：kdrive/TinyX 系（Xfbdev 已在 xorg-server 21.1 移除，若走此路
    需自维护旧分支或采用 TinyX 衍生项目，状态待核实）+ 微型 WM
    （如 tinywm/flwm）。历史经验 X + twm 级会话可在 ~20 MiB 用户空间内运行，
-   但留给应用的余量很小。
+   但留给应用的余量很小。**tinywm 已 vendored**：`third_party/tinywm`
+   （public domain，upstream commit `9d05612`，见该目录 `UPSTREAM`），
+   作为后续魔改的微型 WM 起点。
 3. 完整 Xorg + fbdev 驱动：预计常驻占用偏大，T1 档可能紧张，列为实验项。
 
 浏览器现实上限：links2（图形模式）是 T1 的甜点；NetSurf-fb 内存需求

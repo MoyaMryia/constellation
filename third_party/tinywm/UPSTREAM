@@ -1,0 +1,6 @@
+upstream-url: https://github.com/mackstann/tinywm.git
+upstream-commit: 9d05612
+upstream-branch: master
+license: public domain (see README)
+author: Nick Welch <nick@incise.org>
+vendored-on: 2026-08-15
