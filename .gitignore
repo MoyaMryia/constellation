@@ -9,3 +9,4 @@ build-logs/
 *.tar.xz
 *.tar.bz2
 *.tar.gz
+busybox/initramfs/.staging/

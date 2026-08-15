@@ -84,10 +84,10 @@ IBM ThinkPad 365X / 365XD：
   - 启动后内核常驻（`/proc/meminfo` 基线，含页表/驱动）≤ 8 MiB @ 24 MiB 机型。
 - **裁剪清单**（按收益从大到小）：
   - 只保留参考机型硬件：IDE/libata、16 位 PCMCIA、NE2000 兼容网卡、
-    VGA 帧缓冲——**驱动全内置、禁用模块加载器**（省掉模块基础设施与
-    签名/压缩开销，老硬件不需要热插拔弹性）。L1 对照实验：仅开
-    `CONFIG_MODULES` 就少 144 K 用户态可用内存、bzImage 增 52 KiB，
-    数据见 kernel/NOTES.md；
+    VGA 帧缓冲——**驱动默认全内置，但保留模块加载器**（`CONFIG_MODULES`
+    + `CONFIG_MODULE_UNLOAD`），让用户/维护者可以按需 `insmod`/`modprobe`
+    额外驱动；模块基础设施成本已量化：L1 上少 144 K 用户态可用内存、
+    bzImage 增 52 KiB（kernel/NOTES.md），在 24 MiB 预算内可接受；
   - 文件系统只留 ext4 + proc/sysfs/tmpfs（initrd 以外一切可裁）；
   - 关调试全家桶：SLUB debug、KASAN、kprobes/ftrace/perf、eBPF 大半、
     内核态 Rust（若该 LTS 含）；

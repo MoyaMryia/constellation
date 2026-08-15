@@ -100,15 +100,16 @@ BusyBox 在 Pentium 上因 i686 基线（CMOV）崩溃，用户空间必须用 i
 | vintage | bzImage（XZ） | 内核可用内存（`Memory:` 行，带 initramfs） | 磁盘 ext4 root（无 initramfs） |
 |---|---|---|---|
 | 6.1.182 | 1.16 MiB（1,221,120 B） | 19,620 K / 24,056 K | `Memory: 19732K/24056K`，ext4 挂载成功，`/bin/sh` 启动 |
-| 6.18.44 | 1.24 MiB（1,303,040 B） | 19,152 K / 24,056 K | `Memory: 19264K/24056K`，ext4 挂载成功，`/bin/sh` 启动 |
+| 6.18.44 | 1.29 MiB（1,356,288 B） | 19,008 K / 24,056 K | 已开 `CONFIG_MODULES`；ext4 root 验证见 kernel/NOTES.md |
 
-L1 年代红利 468 K（6.1 更多），仍低于 D10 阈值；内核常驻仍落在 T0 预算
-6–8 MiB 区间内。对照实验：仅开 `CONFIG_MODULES`（驱动仍全内置）使
-6.18.44 用户态可用内存少 144 K、bzImage 增 52 KiB——固定硬件下全内置
-比模块化更省。
+L1 年代红利（同清单口径，均为无 MODULES 时）468 K（6.1 更多），仍低于
+D10 阈值。**模块策略（2026-08 更新）：保留模块加载器**——`CONFIG_MODULES`
++ `CONFIG_MODULE_UNLOAD` 的成本约 144 K 用户态内存 + 52 KiB bzImage，
+在 24 MiB 预算内可接受；用户可 `insmod`/`modprobe` 额外驱动。
 
 **L2 外设快照（2026-08，仅 6.18.44，详见 kernel/NOTES.md）**：L1 基础上
 增加 `PCCARD`/`PCMCIA`/`I82365`、8390 家族网卡（`NE2000`/`NE2K_PCI`/
-`PCMCIA_PCNET`）、`FB`/`FB_VESA`/`FB_VGA16`。bzImage 1,548,800 B
-（1.48 MiB），仍 < 2.5 MiB；`Memory: 18580K/24056K available`。QEMU 下
-NE2K PCI/ISA 均识别 `eth0`，i82365 完成 probe；fb 实绑待 86Box/VESA。
+`PCMCIA_PCNET`）、`FB`/`FB_VESA`/`FB_VGA16`，并保留模块加载器。bzImage
+1,614,336 B（1.54 MiB），仍 < 2.5 MiB；`Memory: 18404K/24056K available`。
+QEMU 下 NE2K PCI/ISA 均识别 `eth0`，i82365 完成 probe；BusyBox 已带
+`insmod`/`rmmod`/`lsmod`/`modprobe` 符号链接；fb 实绑待 86Box/VESA。

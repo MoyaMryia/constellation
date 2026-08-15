@@ -36,25 +36,28 @@ M1 需要 BusyBox initramfs 在 24 MiB 启动到 shell。用户空间二进制�
    make HOSTCC=/usr/bin/gcc-11 CC=$PWD/../../../toolchain/musl-i486/bin/i486-linux-musl-gcc oldconfig
    make -j16 HOSTCC=/usr/bin/gcc-11 CC=$PWD/../../../toolchain/musl-i486/bin/i486-linux-musl-gcc
    ```
-   产物：`busybox`，ELF 32-bit i386 static stripped，约 193 KiB。
+   产物：`busybox`，ELF 32-bit i386 static stripped，约 197 KiB
+   （2026-08 开模块工具后）。
    坑：musl 上必须开 `CONFIG_LFS=y`，否则 BusyBox 的
    `BUG_off_t_size_is_misdetected` 编译期负数组报错。
 
 ## 配置档案
 
 - `busybox/configs/busybox-1.38.0-M1.config` — 最小 M1 配置（static +
-  ash + mount/umount + 基础工具）。注意其中 `CONFIG_EXTRA_CFLAGS` 的
+  ash + mount/umount + 基础工具 + `INSMOD`/`RMMOD`/`LSMOD`/
+  `MODPROBE_SMALL`）。注意其中 `CONFIG_EXTRA_CFLAGS` 的
   `-isystem` 路径是本机绝对路径，换机后需改为对应 `build/hdrs-i386` 路径。
 - `busybox/initramfs/init` — initramfs 的 `/init`：安装 applet 符号链接，
   挂载 proc/sysfs/devtmpfs，打印 meminfo，`exec /bin/sh`。
-- `busybox/mkinitramfs.sh` — 生成 `build/initramfs.cpio.gz`。
+- `busybox/mkinitramfs.sh` — 生成 `build/initramfs.cpio.gz`；applet
+  符号链接包含 `insmod`/`rmmod`/`lsmod`/`modprobe`。
 
 ## 实测
 
 QEMU 6.2 `-cpu pentium -m 24`，`console=ttyS0,115200`：
 
-- initramfs.cpio.gz：113,938 B
-- BusyBox：197,844 B（无 CMOV/SSE 等 i686+ 指令）
+- initramfs.cpio.gz：117,490 B
+- BusyBox：201,940 B（无 CMOV/SSE 等 i686+ 指令；已带模块工具）
 - 6.18.44：`Memory: 20168K/24056K`，`MemTotal 20752 kB`，`MemFree 18676 kB`
 - 6.1.182：`Memory: 20588K/24056K`，`MemTotal 20884 kB`，`MemFree 18672 kB`
 

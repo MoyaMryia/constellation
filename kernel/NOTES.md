@@ -99,8 +99,10 @@ QEMU 6.2 `-cpu pentium -m 24`，串口控制台，`console=ttyS0,115200`。
 L1 在 L0 基础上增加：`CONFIG_BLOCK`、`CONFIG_PCI`、libata
 （`CONFIG_ATA` + `CONFIG_ATA_PIIX`，QEMU 与参考机型同为 Intel PIIX 系）、
 `CONFIG_BLK_DEV_SD`、`CONFIG_EXT4_FS`。分区表支持由 `CONFIG_BLOCK` 带入
-`CONFIG_MSDOS_PARTITION`。配置档案：`kernel/configs/6.1.182-L1.config`、
-`6.18.44-L1.config`。
+`CONFIG_MSDOS_PARTITION`。2026-08 起**保留模块加载器**：
+6.18.44 的 L1/L2 均开 `CONFIG_MODULES` + `CONFIG_MODULE_UNLOAD`；
+6.1.182 冻结为全内置 L1，不再更新。配置档案：
+`kernel/configs/6.1.182-L1.config`（冻结）、`6.18.44-L1.config`。
 
 ### 构建与内存
 
@@ -109,12 +111,13 @@ QEMU 6.2 `-cpu pentium -m 24`，`console=ttyS0,115200`，`-kernel` + `-initrd`
 
 | vintage | bzImage（XZ） | 内核可用内存（`Memory:` 行） | 内核明细 | 备注 |
 |---|---|---|---|---|
-| 6.1.182 | 1,221,120 B（1.16 MiB） | 19,620 K / 24,056 K | code 1880K, rwdata 630K, rodata 412K, init 212K, bss 248K, reserved 4436K | ata_piix 识别硬盘，启动到 shell |
-| 6.18.44 | 1,303,040 B（1.24 MiB） | 19,152 K / 24,056 K | code 2035K, rwdata 637K, rodata 440K, init 240K, bss 208K, reserved 4616K | 同上 |
+| 6.1.182 | 1,221,120 B（1.16 MiB） | 19,620 K / 24,056 K | code 1880K, rwdata 630K, rodata 412K, init 212K, bss 248K, reserved 4436K | 冻结在 L1（无 MODULES），ata_piix 识别硬盘 |
+| 6.18.44 | 1,356,288 B（1.29 MiB） | 19,008 K / 24,056 K | code 2050K, rwdata 638K, rodata 568K, init 240K, bss 208K, reserved 4760K | L1 + MODULES，启动到 shell |
 
-- L1 年代红利：**468 K**（6.1 比 6.18 多 468 K 可用内存），仍远低于 D10
-  的 2 MiB 阈值；D10 继续倾向 6.18。
-- bzImage 较 L0 增量：6.1 +421,888 B；6.18 +438,272 B。两树仍 < 2.5 MiB。
+- L1 年代红利（同清单口径，均为无 MODULES 时）：**468 K**（6.1 比 6.18
+  多 468 K 可用内存），仍远低于 D10 的 2 MiB 阈值；D10 继续倾向 6.18。
+- bzImage 较 L0 增量：6.1 +421,888 B；6.18（无 MODULES）+438,272 B；
+  6.18 开 MODULES 再 +53,248 B。两树仍 < 2.5 MiB。
 
 ### IDE 磁盘 + ext4 root 验证（无 initramfs）
 
@@ -164,20 +167,20 @@ QEMU `-boot c -drive file=<96 MiB 磁盘镜像>,if=ide,format=raw`（**不传
 至此 L1 存储/引导链在 QEMU 全链路打通：**BIOS → MBR → SYSLINUX →
 bzImage → libata/IDE → DOS 分区 → ext4 root → BusyBox PID 1**。
 
-### 模块化与内存对照（6.18.44，2026-08）
+### 模块化策略更新（2026-08）
 
-在 L1 基础上仅追加 `CONFIG_MODULES=y`（驱动仍全内置，不实际加载模块）：
+在 L1 基础上追加 `CONFIG_MODULES=y` + `CONFIG_MODULE_UNLOAD=y`（驱动仍
+全内置，不实际加载模块）的成本：
 
 | 配置 | bzImage | `Memory:` 行（`-kernel` + initramfs） | 差 |
 |---|---|---|---|
 | L1 全内置 | 1,303,040 B | 19,152 K / 24,056 K | 基线 |
 | L1 + `CONFIG_MODULES` | 1,356,288 B | 19,008 K / 24,056 K | bzImage +52 KiB；用户态可用 **少 144 K** |
 
-结论：在硬件固定、所需驱动全集已知且全都会用到的前提下，模块化不会省
-内存，反而先亏掉模块加载器/符号表/重定位等基础设施（本实验约 144 K 用户
-态内存 + 52 KiB 镜像）。这也支持设计文档 §3.2 "驱动全内置、禁用模块加载
-器" 的决策；仅当未来出现多种互斥硬件变体、按需加载省下的驱动常驻明显
-大于 144 K 时才值得重新评估。
+**决策：保留模块加载器。** 成本（约 144 K 用户态内存 + 52 KiB 镜像）在
+24 MiB 预算内可接受；换来用户/维护者可 `insmod`/`modprobe` 额外驱动，
+不必重编内核。驱动仍默认全内置；只有出现多种互斥硬件变体、按需加载省下
+的常驻明显大于模块基础设施成本时，才进一步把具体驱动改成 `m`。
 
 ## L2 外设（2026-08 起只做 6.18）
 
@@ -185,19 +188,25 @@ bzImage → libata/IDE → DOS 分区 → ext4 root → BusyBox PID 1**。
 低于 2 MiB 阈值）。**L2 起先只做 6.18**：6.18 能开就先全流程跑通，6.1
 暂时冻结在 L1；若后续 6.18 在外设层遇到无法接受的成本，再回退补做 6.1。
 
-配置档案：`kernel/configs/6.18.44-L2.config`（基于 L1 增加）：
+配置档案：`kernel/configs/6.18.44-L2.config`（基于 L1 增加，并保留
+`CONFIG_MODULES` + `CONFIG_MODULE_UNLOAD`）：
 - 16 位 PCMCIA：`PCCARD`、`PCMCIA`、`I82365`（参考机型为 i82365 兼容
   ISA 桥；`I82365` 依赖 `ISA`，故补开 `ISA`）；
 - 网络：`NET` + `NETDEVICES` + `ETHERNET`；8390 家族 `NE2000`（ISA）、
   `NE2K_PCI`（PCI，QEMU 可测）、`PCMCIA_PCNET`（PCMCIA，留待 86Box/真机）；
 - VGA fb：`FB` + `FB_VESA` + `FB_VGA16`。
 
+BusyBox 侧同步开启模块工具：`MODPROBE_SMALL` + `INSMOD` + `RMMOD` +
+`LSMOD`，并加入 initramfs applet 符号链接；BusyBox 静态二进制增至
+201,940 B，initramfs gzip 后 117,490 B。
+
 ### 构建与 QEMU 冒烟（仅 6.18.44）
 
-- bzImage：1,548,800 B（1.48 MiB），仍 < 2.5 MiB；较 L1 +245,760 B。
-- `-kernel` + initramfs：`Memory: 18580K/24056K available`
-  （code 2479K, rwdata 650K, rodata 540K, init 248K, bss 216K,
-  reserved 5188K）。
+- bzImage：1,614,336 B（1.54 MiB），仍 < 2.5 MiB；较 L1(无 MODULES)
+  +311,296 B，其中 MODULES 成本约 +52 KiB。
+- `-kernel` + initramfs：`Memory: 18404K/24056K available`
+  （code 2497K, rwdata 646K, rodata 700K, init 248K, bss 216K,
+  reserved 5368K）。
 
 QEMU 验证（`-cpu pentium -m 24`，串口控制台）：
 - `-nic model=ne2k_pci`：`ne2k-pci 0000:00:03.0 eth0: RealTek
@@ -205,12 +214,13 @@ QEMU 验证（`-cpu pentium -m 24`，串口控制台）：
 - `-netdev user,id=n1 -device ne2k_isa,netdev=n1`：
   `ne ne.0 eth0: NE2000 found at 0x300, using IRQ 9`；同时
   `Intel ISA PCIC probe:` 出现（i82365 驱动完成 probe，QEMU 无该设备）。
+- `lsmod` 在 initramfs shell 中可执行（空列表），模块工具符号链接就绪。
 - VGA：`Console: colour VGA+ 80x25`，`vgaarb` 正常；`FB_VESA`/`FB_VGA16`
   已编入内核，但 `-kernel -nographic` 路径下无 VESA BIOS，未出现 `fb0`。
   fb 实绑留待 syslinux/VESA 或 86Box 验证。
 - syslinux 全链路复测通过：`-boot c` 不传 `-kernel`/`-initrd`，
-  SYSLINUX 加载 1.48 MiB 的 L2 bzImage，ext4 root 挂载成功，
-  `Memory: 18692K/24056K available`（无 initrd），BusyBox 落到 ash。
+  SYSLINUX 加载 1.54 MiB 的 L2 bzImage，ext4 root 挂载成功，
+  `Memory: 18520K/24056K available`（无 initrd），BusyBox 落到 ash。
 
 ## 备注
 
