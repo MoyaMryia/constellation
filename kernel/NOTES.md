@@ -139,8 +139,45 @@ qemu-system-i386 -m 24 -cpu pentium \
   filesystem ... ro with ordered data mode`；同样落到 ash。
 - 两个 vintage 均成功：`sda: sda1`（DOS 分区表解析正常）→ ext4 root 挂载
   → BusyBox 作为 PID 1。IDE + ext4 内核路径在 QEMU 上打通。
-- 未做：syslinux/extlinux 引导扇区验证（宿主 loop mount 权限/引导器安装留到
-  后续）；QEMU 下用 `-kernel` 跳过 bootloader，专注验证内核驱动链。
+
+### syslinux 引导验证（2026-08 通过）
+
+宿主无 root 无法 `mount -o loop`，改用两段式绕过：
+1. 用 `mkfs.vfat` + `syslinux --install` 在独立 FAT 镜像上安装 SYSLINUX
+   6.04（Ubuntu jammy 包直接 `dpkg-deb -x` 解包使用，不需要 root），
+   `mcopy` 写入 `bzImage` 与 `syslinux.cfg`；
+2. 把该 FAT 镜像 `dd` 到磁盘镜像的 FAT 分区偏移处，`mbr.bin` 写入磁盘
+   前 440 字节，ext4 rootfs 镜像 `dd` 到 Linux 分区偏移处。
+
+分区布局：`/dev/sda1` FAT16（bootable，SYSLINUX），`/dev/sda2` ext4 root。
+`syslinux.cfg`：`SERIAL 0 115200`，`APPEND root=/dev/sda2 rootfstype=ext4
+init=/bin/sh console=ttyS0,115200 panic=-1`。
+
+QEMU `-boot c -drive file=<96 MiB 磁盘镜像>,if=ide,format=raw`（**不传
+`-kernel`/`-initrd`**），两个 vintage 均成功：
+
+| vintage | SeaBIOS → SYSLINUX | 内核 | root 挂载 | 结果 |
+|---|---|---|---|---|
+| 6.1.182 | `Loading /bzImage... ok` | `Linux version 6.1.182 ...` | `EXT4-fs (sda2): mounted ...` | BusyBox ash 作为 PID 1 |
+| 6.18.44 | 同上 | `Linux version 6.18.44 ...` | `EXT4-fs (sda2): mounted ... ro` | 同上 |
+
+至此 L1 存储/引导链在 QEMU 全链路打通：**BIOS → MBR → SYSLINUX →
+bzImage → libata/IDE → DOS 分区 → ext4 root → BusyBox PID 1**。
+
+### 模块化与内存对照（6.18.44，2026-08）
+
+在 L1 基础上仅追加 `CONFIG_MODULES=y`（驱动仍全内置，不实际加载模块）：
+
+| 配置 | bzImage | `Memory:` 行（`-kernel` + initramfs） | 差 |
+|---|---|---|---|
+| L1 全内置 | 1,303,040 B | 19,152 K / 24,056 K | 基线 |
+| L1 + `CONFIG_MODULES` | 1,356,288 B | 19,008 K / 24,056 K | bzImage +52 KiB；用户态可用 **少 144 K** |
+
+结论：在硬件固定、所需驱动全集已知且全都会用到的前提下，模块化不会省
+内存，反而先亏掉模块加载器/符号表/重定位等基础设施（本实验约 144 K 用户
+态内存 + 52 KiB 镜像）。这也支持设计文档 §3.2 "驱动全内置、禁用模块加载
+器" 的决策；仅当未来出现多种互斥硬件变体、按需加载省下的驱动常驻明显
+大于 144 K 时才值得重新评估。
 
 ## 备注
 

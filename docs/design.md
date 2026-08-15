@@ -85,7 +85,9 @@ IBM ThinkPad 365X / 365XD：
 - **裁剪清单**（按收益从大到小）：
   - 只保留参考机型硬件：IDE/libata、16 位 PCMCIA、NE2000 兼容网卡、
     VGA 帧缓冲——**驱动全内置、禁用模块加载器**（省掉模块基础设施与
-    签名/压缩开销，老硬件不需要热插拔弹性）；
+    签名/压缩开销，老硬件不需要热插拔弹性）。L1 对照实验：仅开
+    `CONFIG_MODULES` 就少 144 K 用户态可用内存、bzImage 增 52 KiB，
+    数据见 kernel/NOTES.md；
   - 文件系统只留 ext4 + proc/sysfs/tmpfs（initrd 以外一切可裁）；
   - 关调试全家桶：SLUB debug、KASAN、kprobes/ftrace/perf、eBPF 大半、
     内核态 Rust（若该 LTS 含）；
@@ -331,9 +333,10 @@ QEMU（-cpu 486/pentium, -m 24/40）为快速回归环境，最终真机确认�
 - **M0 工具链**：交叉工具链 + Hello World 静态二进制在 86Box 目标上运行。
 - **M1 可引导核心**：精简 LTS 内核 + BusyBox initramfs，24 MiB 内存启动到 shell。
   **已跑通**（2026-08）：6.1.182 / 6.18.44 + musl i486 静态 BusyBox 1.38.0，
-  QEMU `-cpu pentium -m 24` 落到 ash；L1 内核层（IDE/libata/ext4）也已
-  QEMU 验证：DOS 分区 + ext4 root 直接挂载并启动 `/bin/sh`。下一步：
-  syslinux/extlinux 引导扇区验证与 L2 外设（PCMCIA/NE2000/VGA fb）。
+  QEMU `-cpu pentium -m 24` 落到 ash；L1 内核层（IDE/libata/ext4 + DOS 分区）
+  已 QEMU 验证；**syslinux 引导链已跑通**：BIOS → MBR → SYSLINUX → bzImage
+  → ext4 root → BusyBox PID 1（见 kernel/NOTES.md）。下一步 L2 外设
+  （PCMCIA/NE2000/VGA fb）。
 - **M2 最小系统**：musl + s6 + apk + 基础仓库（~30 包），硬盘安装形态可用，
   出 T0 实测需求表。
 - **M3 网络与包生态**：PCMCIA 有线网络、udhcpc、远程 apk 仓库，包数 ~100。
