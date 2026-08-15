@@ -34,7 +34,12 @@ Constellation OS 是一个面向老旧 x86 硬件的 Linux 发行版项目。其
 
 - [docs/design.md](docs/design.md) — 总体设计文档（选型论证、架构基线、路线图）
 - [docs/memory-budget.md](docs/memory-budget.md) — 内存预算明细
+- [kernel/NOTES.md](kernel/NOTES.md) — 内核裁剪研究笔记（M1 / D10 实测数据）
+- [busybox/NOTES.md](busybox/NOTES.md) — BusyBox/musl initramfs 研究笔记（M1）
 
 ## 状态
 
-早期设计阶段。尚无可用镜像。
+早期设计阶段。**M1 可引导核心已跑通**：精简 LTS 内核（6.1.182 / 6.18.44）+
+musl i486 静态 BusyBox initramfs，QEMU 24 MiB 启动到 shell（见
+[kernel/NOTES.md](kernel/NOTES.md) 与 [busybox/NOTES.md](busybox/NOTES.md)）；
+尚无可用镜像。

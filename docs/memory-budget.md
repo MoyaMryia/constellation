@@ -71,8 +71,25 @@ Constellation 的失败，而是坐标系上另一个合法的极端点。
 
 ## 4. 实测回填计划（M2 完成时）
 
-- [ ] 内核 bzImage 尺寸与启动后 `/proc/meminfo` 基线
+- [x] 内核 bzImage 尺寸与启动后 `/proc/meminfo` 基线（L0 已回填；L1–L4 完成后补全全量基线）
 - [ ] s6 全家桶常驻 RSS
 - [ ] apk 安装事务峰值 RSS（`time -v` / cgroup 统计）
 - [ ] zram 压力下交互延迟主观评估
 - [ ] 回填本表并签发 T0 正式需求表
+
+### 4.1 L0 实测快照（2026-08，详见 kernel/NOTES.md）
+
+QEMU 6.2 `-cpu pentium -m 24`，L0 = tinyconfig + 串口/init/devtmpfs/proc/sysfs：
+
+| vintage | bzImage（XZ） | 用户态可用内存 @24M |
+|---|---|---|
+| 6.1.182 | 0.76 MiB（799,232 B） | 20,700 K |
+| 6.18.44 | 0.82 MiB（864,768 B） | 20,280 K |
+
+年代红利约 420 K，低于 D10 的 2 MiB 阈值，D10 暂倾向 6.18。内核常驻明细与
+M686 choice 坑见 kernel/NOTES.md。
+
+**M1 initramfs 快照（同上环境）**：musl i486 静态 BusyBox 1.38.0
+（193 KiB），initramfs gzip 后 114 KiB；启动到 shell 后 MemFree ≈ 18.6 MiB
+（6.1 18,672 kB / 6.18 18,676 kB），距 24 MiB 预算还很宽裕。glibc 静态
+BusyBox 在 Pentium 上因 i686 基线（CMOV）崩溃，用户空间必须用 i486 基线 libc。

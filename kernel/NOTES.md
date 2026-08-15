@@ -44,16 +44,17 @@
 ## 实测数据（回填）
 
 环境：QEMU 6.2 `-cpu pentium -m 24`，串口控制台，L0 = tinyconfig +
-串口/init/devtmpfs/proc/sysfs，CPU 均为 Pentium Classic（M586TSC）。
+串口/init/devtmpfs/proc/sysfs/BINFMT_SCRIPT，CPU 均为 Pentium Classic
+（`M586TSC`）。bzImage 压缩为 **XZ**（配置档案中已开 `CONFIG_KERNEL_XZ`）。
 
 | vintage | 层级 | bzImage | 用户态可用内存 @24M | 内核明细 | 备注 |
 |---|---|---|---|---|---|
-| 6.1.182 | L0 | 0.76 MiB（799,232 B，默认压缩） | **20,700 K / 24,056 K** | code 1178K, rwdata 561K, rodata 248K, init 184K, bss 244K, reserved 3356K | 启动正常，panic 仅为无 init（预期） |
-| 6.18.44 | L0 | 0.82 MiB（864,768 B，默认压缩） | **20,280 K / 24,056 K** | code 1324K, rwdata 556K, rodata 272K, init 192K, bss 204K, reserved 3496K | 同上 |
+| 6.1.182 | L0 | 0.76 MiB（799,232 B，XZ） | **20,700 K / 24,056 K** | code 1178K, rwdata 561K, rodata 248K, init 184K, bss 244K, reserved 3356K | 启动正常，panic 仅为无 init（预期） |
+| 6.18.44 | L0 | 0.82 MiB（864,768 B，XZ） | **20,280 K / 24,056 K** | code 1324K, rwdata 556K, rodata 272K, init 192K, bss 204K, reserved 3496K | 同上 |
 
 **L0 年代红利：420 K（6.1 比 6.18 多出 420K 用户态可用内存）**——远低于
 D10 的 2 MiB 阈值。若 L1–L4 数据不反转，D10 倾向 **6.18**（上游维护窗口
-多约 2 年）。bzImage 两者均远低于 2.5 MiB 目标（尚未换 XZ，换了更小）。
+多约 2 年）。bzImage 两者均远低于 2.5 MiB 目标。
 
 ### 过程记录
 
@@ -62,10 +63,42 @@ D10 的 2 MiB 阈值。若 L1–L4 数据不反转，D10 倾向 **6.18**（上�
   （Kconfig choice 需先 `--disable M686`），症状为 bzImage 启动即拒绝
   （"requires an i686 CPU"）——修复后正常。此坑已记录，后续层级配置
   注意 choice 类符号的改法；
-- 两个树均在 16 线程宿主机上 ~2 分钟完成 L0 构建，迭代成本可忽略。
+- 两个树均在 16 线程宿主机上 ~2 分钟完成 L0 构建，迭代成本可忽略；
+- L0 配置补开 `CONFIG_BINFMT_SCRIPT`：initramfs 的 `/init` 可直接写成
+  `#!/bin/busybox sh` 脚本，不必先备静态 ELF init。两个 vintage 均已
+  重建验证，bzImage 尺寸与开之前一致（6.1 799,232 B / 6.18 864,768 B）。
+
+## M1 可引导核心（initramfs 启动，2026-08 回填）
+
+M1 验收：精简 LTS 内核 + BusyBox initramfs，24 MiB 启动到 shell。
+本次用 **musl i486 静态 BusyBox 1.38.0**（glibc 静态 i386 在 Pentium 上
+因 Ubuntu glibc 为 i686 基线含 CMOV，实机/`-cpu pentium` 下 `trap invalid
+opcode`，不可用；musl 从源码以 `-march=i486` 构建后无 CMOV，见
+`busybox/NOTES.md`）。initramfs 仅 114 KiB（gzip）。
+
+QEMU 6.2 `-cpu pentium -m 24`，串口控制台，`console=ttyS0,115200`。
+两个 vintage 均成功执行 `/init`、挂载 proc/sysfs/devtmpfs 并落到 ash。
+
+| vintage | bzImage（XZ） | 内核可用内存（`Memory:` 行） | /proc/meminfo MemTotal | /proc/meminfo MemFree | 备注 |
+|---|---|---|---|---|---|
+| 6.1.182 | 799,232 B（0.76 MiB） | 20,588 K / 24,056 K | 20,884 kB | 18,672 kB | shell 输入回显正常 |
+| 6.18.44 | 864,768 B（0.82 MiB） | 20,168 K / 24,056 K | 20,752 kB | 18,676 kB | 同上 |
+
+- 内核可用内存差仍为 **420 K**（6.1 更多），与 L0 一致；D10 阈值 2 MiB，
+  继续倾向 6.18。
+- M1 验收项：bzImage ≤ 2.5 MiB **达成**（两树均 < 1 MiB）；内核常驻
+  ≤ 8 MiB **达成**（24,056 − MemTotal ≈ 3.2–3.3 MB，含内核与保留内存）。
+- BusyBox 静态二进制（musl i486）197,844 B，连同 `/init` 与 cpio 开销，
+  initramfs gzip 后 113,938 B。
+- glibc 静态方案失败记录：Ubuntu 32 位 glibc 静态库为 i686 基线
+  （含 `cmove`），在 `-cpu pentium` 上 init 崩溃；本项目用户空间基线是
+  i486，必须用 musl（或其它 i486 基线 libc），M0 交叉工具链应基于 musl。
 
 ## 备注
 
 - 构建用宿主机 gcc -m32 multilib（`ARCH=i386`），M0 交叉工具链就绪后迁移；
+- 本机 gcc 是指向 ccache 的符号链接时，bwrap 等只读 `/run/user/...` 环境需
+  `CCACHE_DISABLE=1`（或指定可写 `CCACHE_DIR`），否则 `make syncconfig`
+  会因 ccache 临时目录只读失败；
 - 6.18 注意：其 Kconfig 仍有 `M486`（7.x 才移除），两个 vintage 均可配
   Pentium Classic（`M586TSC`）——D10 实验统一用 `M586TSC`，贴参考机型。

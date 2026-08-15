@@ -1,2 +1,11 @@
+# 上游源码与构建产物（不入库；tarball 保留在本地，配方/脚本可随时重建）
 kernel/src/
+busybox/src/
+busybox/build/
+toolchain/src/
+toolchain/musl-i486/
+build/
+build-logs/
 *.tar.xz
+*.tar.bz2
+*.tar.gz
