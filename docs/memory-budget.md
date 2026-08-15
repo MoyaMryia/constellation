@@ -87,6 +87,7 @@ QEMU 6.2 `-cpu pentium -m 24`，L0 = tinyconfig + 串口/init/devtmpfs/proc/sysf
 | L1 + MODULES | 1.29 MiB（1,356,288 B） | 19,008 K / 24,056 K |
 | L2 + MODULES，驱动=m | 1.50 MiB（1,577,472 B） | 18,480 K / 24,056 K |
 | L3 + zram(lz4) + swap | 1.52 MiB（1,589,760 B） | 18,460 K / 24,056 K |
+| L4 + 用户空间契约 | 1.54 MiB（1,614,336 B） | 18,396 K / 24,056 K |
 
 早期 6.1 对比数据（L0 多 420 K / L1 多 468 K）保留在 git 历史；6.1 已移除。
 
@@ -107,3 +108,8 @@ QEMU 下 `insmod` 8390 + ne2k-pci 后识别 `eth0`；BusyBox 带
 `ZRAM_DEF_COMP_LZ4=y`。QEMU 下 `echo 8388608 > /sys/block/zram0/disksize`
 + `mkswap /dev/zram0` + `swapon /dev/zram0` 成功，`free` 显示
 `Swap: 8188 0 8188`。BusyBox 已带 `mkswap`/`swapon`/`swapoff`/`free`。
+
+**L4 用户空间契约快照（2026-08）**：开启 `EPOLL`/`SIGNALFD`/`TIMERFD`/
+`EVENTFD`/`SHMEM`+`TMPFS`/`INOTIFY_USER`；namespace/cgroup 经核对暂不
+需要。BusyBox 开 `GETTY`/`LOGIN`，QEMU 下 `rdinit=/sbin/init` +
+inittab 成功启动 getty 并显示 `(none) login:`。

@@ -24,7 +24,7 @@ cp "$BB_BIN" "$STAGE/bin/busybox"
 
 # Applet symlinks. sh must exist before /init runs (shebang).
 ln -sf busybox "$STAGE/bin/sh"
-for a in '[' cat echo false free halt hostname insmod ls lsmod mknod mkswap modprobe mount poweroff printf reboot rmmod sleep swapoff swapon sync test true umount uname; do
+for a in '[' cat echo false free getty halt hostname init insmod login ls lsmod mknod mkswap modprobe mount poweroff printf reboot rmmod sleep swapoff swapon sync test true umount uname; do
     ln -sf busybox "$STAGE/bin/$a"
 done
 

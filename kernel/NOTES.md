@@ -163,6 +163,29 @@ cat /proc/swaps
 zram 作为 T0 档内存机制的验收路径打通；接下来 L4 用户空间契约
 （s6/BusyBox 所需内核接口）。
 
+## L4 用户空间契约（s6/BusyBox 所需内核接口，2026-08 回填）
+
+L4 在 L3 上增加：`EPOLL`、`SIGNALFD`、`TIMERFD`、`EVENTFD`、
+`SHMEM` + `TMPFS`、`INOTIFY_USER`（`MEMFD_CREATE`/`FSNOTIFY` 随之打开）。
+`devtmpfs`/`proc`/`sysfs` 在 L0 已有；`TTY`/`UNIX98_PTYS` 也已存在。
+配置档案：`kernel/configs/6.18.44-L4.config`。
+
+namespace/cgroup 判断：s6/BusyBox init/getty 均不依赖 namespace/cgroup；
+本轮不开。后续若 apk 或 s6 新版本需要，按需加。
+
+- bzImage：1,614,336 B（1.54 MiB），仍 < 2.5 MiB；较 L3 +24,576 B。
+- `-kernel` + initramfs：`Memory: 18396K/24056K available`
+  （code 2509K, rwdata 645K, rodata 680K, init 244K, bss 212K,
+  reserved 5376K）。
+
+验收测试（BusyBox init + getty，`rdinit=/sbin/init`）：
+- BusyBox 开 `GETTY` + `LOGIN`；测试 initramfs 增加 `/etc/inittab`、
+  `/etc/passwd`、`/sbin/init -> /bin/busybox`；
+- inittab 执行 `mount proc/sysfs/devtmpfs` 后 `ttyS0::respawn:/bin/getty
+  -L ttyS0 115200 vt100`；
+- QEMU 下 `init started: BusyBox v1.38.0`，随后 `(none) login:` 出现在
+  串口——**init 能起、getty 能开** 达成。
+
 ## 备注
 
 - 构建用宿主机 gcc -m32 multilib（`ARCH=i386`），M0 交叉工具链就绪后迁移；

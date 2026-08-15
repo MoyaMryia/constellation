@@ -36,8 +36,8 @@ M1 需要 BusyBox initramfs 在 24 MiB 启动到 shell。用户空间二进制�
    make HOSTCC=/usr/bin/gcc-11 CC=$PWD/../../../toolchain/musl-i486/bin/i486-linux-musl-gcc oldconfig
    make -j16 HOSTCC=/usr/bin/gcc-11 CC=$PWD/../../../toolchain/musl-i486/bin/i486-linux-musl-gcc
    ```
-   产物：`busybox`，ELF 32-bit i386 static stripped，约 205 KiB
-   （2026-08 开模块与 swap 工具后）。
+   产物：`busybox`，ELF 32-bit i386 static stripped，约 237 KiB
+   （2026-08 开模块/swap/getty/login 工具后）。
    坑：musl 上必须开 `CONFIG_LFS=y`，否则 BusyBox 的
    `BUG_off_t_size_is_misdetected` 编译期负数组报错。
 
@@ -56,8 +56,8 @@ M1 需要 BusyBox initramfs 在 24 MiB 启动到 shell。用户空间二进制�
 
 QEMU 6.2 `-cpu pentium -m 24`，`console=ttyS0,115200`：
 
-- initramfs.cpio.gz：119,932 B
-- BusyBox：210,132 B（无 CMOV/SSE 等 i686+ 指令；已带模块/swap 工具）
+- initramfs.cpio.gz：142,204 B
+- BusyBox：242,900 B（无 CMOV/SSE 等 i686+ 指令；已带模块/swap/getty/login 工具）
 - 6.18.44：`Memory: 20168K/24056K`，`MemTotal 20752 kB`，`MemFree 18676 kB`
 
 6.18.44 成功落到 ash 提示符，输入回显正常（见 kernel/NOTES.md）。

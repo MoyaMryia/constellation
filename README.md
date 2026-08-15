@@ -47,5 +47,6 @@ BIOS → MBR → SYSLINUX → bzImage → ext4 root → BusyBox PID 1（见
 kernel/NOTES.md）。**L2 外设已开工（仅 6.18.44）**：PCMCIA/i82365、
 8390 网卡（`NE2K_PCI` 等已改为模块并验证 `insmod` 后识别 `eth0`）、
 VGA fb 已编入/构建为模块；**L3 内存机制已跑通**：zram(lz4) + swap
-在 QEMU 下成功启用；BusyBox 带 insmod/rmmod/lsmod/modprobe/mkswap/swapon/swapoff/free。
+在 QEMU 下成功启用；**L4 用户空间契约已跑通**：BusyBox init + getty 在
+QEMU 下启动到 `(none) login:`。BusyBox 带 insmod/rmmod/lsmod/modprobe/mkswap/swapon/swapoff/free/getty/login。
 尚无可用安装镜像。

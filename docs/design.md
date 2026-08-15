@@ -343,6 +343,9 @@ QEMU（-cpu 486/pentium, -m 24/40）为快速回归环境，最终真机确认�
   **L3 内存机制已跑通**：`ZRAM=y` + `ZRAM_BACKEND_LZ4=y` +
   `ZRAM_DEF_COMP_LZ4=y`；QEMU 下 `mkswap /dev/zram0` + `swapon /dev/zram0`
   成功，`free` 显示 8 MiB zram swap 可用。
+  **L4 用户空间契约已跑通**：开启 `EPOLL`/`SIGNALFD`/`TIMERFD`/`EVENTFD`/
+  `TMPFS`/`INOTIFY_USER`；namespace/cgroup 经核对暂不需要；QEMU 下
+  BusyBox init + getty 启动到 `(none) login:`。
 - **M2 最小系统**：musl + s6 + apk + 基础仓库（~30 包），硬盘安装形态可用，
   出 T0 实测需求表。
 - **M3 网络与包生态**：PCMCIA 有线网络、udhcpc、远程 apk 仓库，包数 ~100。
