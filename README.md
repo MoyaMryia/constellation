@@ -36,6 +36,7 @@ Constellation OS 是一个面向老旧 x86 硬件的 Linux 发行版项目。其
 - [docs/memory-budget.md](docs/memory-budget.md) — 内存预算明细
 - [kernel/NOTES.md](kernel/NOTES.md) — 内核裁剪研究笔记（M1 / D10 实测数据）
 - [busybox/NOTES.md](busybox/NOTES.md) — BusyBox/musl initramfs 研究笔记（M1）
+- [docs/m2-notes.md](docs/m2-notes.md) — M2 最小系统笔记（s6/rootfs/syslinux 磁盘启动）
 
 ## 状态
 
@@ -49,4 +50,4 @@ kernel/NOTES.md）。**L2 外设已开工（仅 6.18.44）**：PCMCIA/i82365、
 VGA fb 已编入/构建为模块；**L3 内存机制已跑通**：zram(lz4) + swap
 在 QEMU 下成功启用；**L4 用户空间契约已跑通**：BusyBox init + getty 在
 QEMU 下启动到 `(none) login:`。BusyBox 带 insmod/rmmod/lsmod/modprobe/mkswap/swapon/swapoff/free/getty/login。
-尚无可用安装镜像。
+尚无可用安装镜像；**M2 已跑通 s6-svscan + getty 硬盘启动**（见 docs/m2-notes.md）。
