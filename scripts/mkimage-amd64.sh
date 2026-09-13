@@ -24,6 +24,7 @@ OUT=${IMAGE:-$ROOT/build/amd64/constellation-x61.img}
 DISK_SIZE=${DISK_SIZE:-512M}
 BOOT_SIZE_MIB=${BOOT_SIZE_MIB:-32}
 ROOT_SPEC=${ROOT_SPEC:-LABEL=root}
+GFXPAYLOAD=${GFXPAYLOAD:-1024x768x16}
 KERNEL_CMDLINE=${KERNEL_CMDLINE:-"root=/dev/sda2 rootfstype=ext4 init=/sbin/init console=tty0 console=ttyS0,115200"}
 
 WORK=$(mktemp -d /tmp/constellation-mkimage.XXXXXX)
@@ -62,7 +63,7 @@ set timeout=3
 set default=0
 # vga= 已被现代内核废弃（会被告知"unknown parameter"并透传给用户空间），
 # 改由 GRUB 自己设 VBE 模式并通过 screen_info 传给内核，vesafb 据此绑定。
-set gfxpayload=1024x768x16
+set gfxpayload=$GFXPAYLOAD
 menuentry "Constellation x86_64 (ThinkPad X61)" {
   set root=(hd0,msdos1)
   linux /bzImage $KERNEL_CMDLINE
