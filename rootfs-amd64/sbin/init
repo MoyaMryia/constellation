@@ -1,0 +1,37 @@
+#!/bin/sh
+# Constellation OS x86_64 — PID 1。
+# 与 i486 版（rootfs/sbin/init）同构：挂载伪文件系统 → 起 s6-svscan。
+# 差别：
+#   1) 挂载改成幂等的。本风味内核开了 CONFIG_DEVTMPFS_MOUNT，/dev 在
+#      init 之前已被内核挂好，再 mount 会拿到 EBUSY；i486 版在同一处用
+#      `|| exec sh` 会在 EBUSY 时误判为失败并掉到 shell（表现为"启动了但
+#      主机名是 (none)、root 被当命令执行"）。故改为挂载后按 /proc/mounts
+#      复核，只有真的没挂上才回退。
+#   2) zram swap 在这里一次性建立（本平台驱动全内置，无需 modprobe）。
+#   3) 不再 modprobe 8390/PCMCIA 那套 X61 上不存在的驱动。
+export PATH=/bin:/usr/bin:/sbin
+
+mount -t proc proc /proc 2>/dev/null
+mount -t sysfs sysfs /sys 2>/dev/null
+mount -t devtmpfs devtmpfs /dev 2>/dev/null
+
+grep -q '^proc /proc proc' /proc/mounts 2>/dev/null || exec sh
+grep -q '^sysfs /sys sysfs' /proc/mounts 2>/dev/null || exec sh
+
+mount -o remount,rw / || exec sh
+hostname "$(cat /etc/hostname)"
+
+# zram swap —— 本项目"内存压缩"命题的落点。X61 物理内存远超需求，
+# 但这一层是低内存档位能否成立的关键，故默认启用并打印实测值。
+if [ -e /sys/block/zram0/disksize ]; then
+  ZRAM_SIZE=${ZRAM_SIZE:-16777216}
+  echo "$ZRAM_SIZE" > /sys/block/zram0/disksize 2>/dev/null
+  if mkswap /dev/zram0 >/dev/null 2>&1 && swapon /dev/zram0 2>/dev/null; then
+    echo "constellation: zram0 swap on ($ZRAM_SIZE bytes)"
+  else
+    echo "constellation: zram0 swap setup failed"
+  fi
+fi
+
+echo 'Constellation x86_64 (X61): starting s6-svscan'
+exec s6-svscan /etc/s6

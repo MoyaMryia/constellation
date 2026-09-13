@@ -1,0 +1,4 @@
+#!/bin/sh
+# 串口登录（QEMU 验收通道；X61 无串口硬件，故用 sleep 兜底不刷日志）。
+[ -c /dev/ttyS0 ] || exec /bin/sleep 3600
+exec /bin/getty -L ttyS0 115200 vt100

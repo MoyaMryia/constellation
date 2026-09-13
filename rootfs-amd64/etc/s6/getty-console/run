@@ -1,0 +1,6 @@
+#!/bin/sh
+# VGA/帧缓冲控制台登录（X61 本地屏）。
+# 用 sleep 兜底：X61 上没有串口，ttyS0 服务会落到 sleep 分支；反之在
+# QEMU -nographic 下没有真实 VGA 控制台时本服务落到 sleep。两边都不刷日志。
+[ -c /dev/tty1 ] || exec /bin/sleep 3600
+exec /bin/getty -L tty1 38400 vt100
