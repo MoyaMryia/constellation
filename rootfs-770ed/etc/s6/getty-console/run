@@ -1,0 +1,5 @@
+#!/bin/sh
+# 本地控制台登录（770ED 的 14.1" 1024x768 TFT）。
+# 没有该 tty 时（例如纯串口验收）退到长睡，不刷日志。
+[ -c /dev/tty1 ] || exec /bin/sleep 3600
+exec /bin/getty -L tty1 38400 vt100

@@ -1,0 +1,5 @@
+#!/bin/sh
+# 串口登录。770ED 机身上没有串口，但 SelectaDock/PC 卡串口或 QEMU 验收
+# 通道都靠它；没有 ttyS0 时退到长睡。
+[ -c /dev/ttyS0 ] || exec /bin/sleep 3600
+exec /bin/getty -L ttyS0 115200 vt100

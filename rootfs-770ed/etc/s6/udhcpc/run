@@ -1,0 +1,19 @@
+#!/bin/sh
+# 有线网络 DHCP：接口名由内核决定（CardBus 网卡可能是 eth0，机内无网口）。
+# 先给 5 秒等 hotplug 把网卡驱动装好，再找第一个非 lo 接口。
+for i in 1 2 3 4 5; do
+  iface=
+  for d in /sys/class/net/*; do
+    n=${d##*/}
+    [ "$n" = lo ] && continue
+    iface=$n
+    break
+  done
+  [ -n "$iface" ] && break
+  /bin/sleep 1
+done
+[ -n "$iface" ] || exec /bin/sleep 3600
+
+/bin/ip link set "$iface" up
+echo "constellation: udhcpc on $iface"
+exec /bin/udhcpc -f -i "$iface" -s /etc/udhcpc.script

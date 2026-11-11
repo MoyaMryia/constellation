@@ -35,7 +35,8 @@
 ## 配置存档
 
 `kernel/configs/` 下按 `6.18.44-Lx.config` 命名提交 git，每层附增量说明
-（提交信息即裁剪日志）。6.1 配置已移除。
+（提交信息即裁剪日志）。L4 默认是参考机型 Pentium 风味；真 486 风味通过
+`6.18.44-legacy486.fragment` 生成。6.1 配置已移除。
 
 ## 实测数据
 
@@ -175,6 +176,11 @@ M2 s6 联调后补开 `FILE_LOCKING`（s6-svscan 锁文件）与
 namespace/cgroup 判断：s6/BusyBox init/getty 均不依赖 namespace/cgroup；
 本轮不开。后续若 apk 或 s6 新版本需要，按需加。
 
+M2 契约复审后又补齐：`MULTIUSER` 权限模型、IPv4/Unix socket、
+`STACKPROTECTOR_STRONG`/`FORTIFY_SOURCE`/随机内核栈偏移，以及旧 PIIX/MPIIX、
+generic/legacy PATA 回退。此前尺寸和内存数字对应补齐前的配置，必须重新构建
+测量后再更新，不能用于判断这些选项的增量。
+
 - bzImage：1,618,432 B（1.54 MiB），仍 < 2.5 MiB。
 - syslinux 磁盘启动（无 initrd）：`Memory: 18512K/24056K available`
   （code 2522K, rwdata 649K, rodata 680K, init 244K, bss 212K,
@@ -189,9 +195,33 @@ namespace/cgroup 判断：s6/BusyBox init/getty 均不依赖 namespace/cgroup；
 
 ## 备注
 
-- 构建用宿主机 gcc -m32 multilib（`ARCH=i386`），M0 交叉工具链就绪后迁移；
+- 内核构建仍使用宿主机 GCC multilib（`ARCH=i386`）；musl/BusyBox 使用
+  `scripts/build-core.sh` 生成的 i486 musl 包装工具链；
 - 本机 gcc 是指向 ccache 的符号链接时，bwrap 等只读 `/run/user/...` 环境需
   `CCACHE_DISABLE=1`（或指定可写 `CCACHE_DIR`），否则 `make syncconfig`
   会因 ccache 临时目录只读失败；
 - 6.18 Kconfig 仍有 `M486`（7.x 才移除），统一用 `M586TSC`（Pentium
   Classic），贴参考机型。
+
+## 770ED 风味：6.6.162（i686，带模块）
+
+参考机型 IBM ThinkPad 770ED（PII 266 / 440BX / Cyber9397DVD / CS4237B /
+TI PCI1250 / PIIX4 UHCI / APM 1.2，64 MiB）。与 i486 线的不同：
+
+- CPU 档位改为 `CONFIG_MPENTIUMII`（`-march=pentium2`），用户空间仍是 i486；
+- 驱动以模块为主（CardBus/无线/声卡/猫/USB 外设）：137 个模块，约 5 MB；
+- **内核版本固定在 6.6.162 LTS**，因为 16 位 PCMCIA 无线驱动（orinoco_cs、
+  hostap_cs、atmel_cs、airo_cs、ray_cs、spectrum_cs、libertas_cs）在
+  6.7–6.11 之间被上游整体移除。这条线的完整配置在
+  `kernel/configs/6.6.162-770ed.config`，生成方式见 `scripts/genconfig-770ed.sh`；
+  6.18 线同样可构建（`kernel/configs/6.18.44-770ed.config`）。
+
+实测（QEMU，`-cpu pentium2`）：
+
+| 配置 | bzImage | 模块 | 到 `login:` 的内存地板 |
+|---|---|---|---|
+| 6.6.162 770ED | 1,970,688 B（1.97 MiB） | 137 | **23 MiB**（22 MiB 时解压阶段零输出） |
+| 6.18.44 770ED | 2,093,568 B（2.09 MiB） | 114 | 未单独扫描（同配置启动到 login） |
+
+64 MiB（参考机配置）启动后：`MemTotal 58 864 kB`、`MemFree 44 524 kB`，
+zram0 swap 16 MiB 已启用。

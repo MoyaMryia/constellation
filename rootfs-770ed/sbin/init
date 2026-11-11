@@ -1,0 +1,70 @@
+#!/bin/sh
+# Constellation OS — ThinkPad 770ED 的 PID 1。
+#
+# 结构与其他风味同构：挂伪文件系统 → 建 zram swap → 按需加载 770ED
+# 特有驱动 → exec s6-svscan。
+#
+# 770ED 与 X61 风味的三点差别：
+#   1) 没有 ACPI，只有 APM 1.2：/proc/apm 由内核 APM 驱动提供，休眠/挂起
+#      由 BIOS 主导，用户空间不需要常驻守护进程。
+#   2) 显示器是 Trident Cyber9397DVD，fb 驱动是模块（tridentfb）：必须在
+#      getty 之前加载，否则 tty1 会停在 VGA 文本 80x25 直到有人 modprobe。
+#   3) 声卡是 ISA PnP 的 CS4237B，同样按模块加载；加载失败不影响启动
+#      （有的机器 BIOS 把音频关了，或资源被 Cat 的 DSP 占着）。
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
+# 注意顺序与重定向：这里**不能**写 `2>/dev/null`。此刻 /dev 还是空目录
+# （本风味没开 CONFIG_DEVTMPFS_MOUNT），ash 在重定向失败时会直接跳过该
+# 命令——挂载就不会发生，然后 `grep /proc/mounts || exec sh` 掉进 shell，
+# 症状是"启动了、没有主机名、每行命令都报 not found"。
+mountpoint -q /dev  || mount -t devtmpfs devtmpfs /dev
+mountpoint -q /proc || mount -t proc proc /proc
+mountpoint -q /sys  || mount -t sysfs sysfs /sys
+
+grep -q '^proc /proc proc' /proc/mounts || exec sh
+grep -q '^sysfs /sys sysfs' /proc/mounts || exec sh
+
+mount -o remount,rw / || exec sh
+hostname "$(cat /etc/hostname)"
+
+# 热插拔：CardBus 插卡后内核发 uevent，本脚本按 MODALIAS 交给 modprobe。
+# 没有 udev 也没有 systemd，这一行就是全部的"自动驱动加载"。
+if [ -w /proc/sys/kernel/hotplug ]; then
+  echo /sbin/hotplug > /proc/sys/kernel/hotplug 2>/dev/null || true
+fi
+
+# 冷插拔：把启动瞬间已经存在的设备节点补齐（CardBus 槽位、USB 口）。
+/bin/mdev -s 2>/dev/null || true
+
+# 机内固定设备的驱动。三者都是模块，顺序无关，失败都无害：
+#   tridentfb  — 1024x768-16 面板模式见 /etc/modprobe.d/tridentfb.conf
+#   snd-cs4236 — CS4237B，ISA PnP 探测
+#   floppy     — APM 休眠需要它，哪怕没插软驱
+#   zram       — 6.6 风的 zram 是模块（6.18 风是内置，modprobe 会静默失败）
+for m in tridentfb snd-cs4236 floppy zram; do
+  /sbin/modprobe -q "$m" 2>/dev/null || true
+done
+
+# 冷插拔：启动之前就已经存在的 PCI/USB/PnP 设备不会再有 uevent（热插拔
+# 助手是刚刚才装上的），所以按 modalias 逐条 modprobe 一遍——这就是 udev
+# coldplug 在本镜像里的全部等价物。CardBus 网卡、USB 卡、外接显示器都在
+# 这一步被驱动接管。
+for mf in /sys/bus/pci/devices/*/modalias /sys/bus/usb/devices/*/modalias \
+          /sys/bus/pnp/devices/*/modalias /sys/bus/pcmcia/devices/*/modalias; do
+  [ -r "$mf" ] || continue
+  /sbin/modprobe -q "$(cat "$mf")" 2>/dev/null || true
+done
+
+# zram swap：64 MiB 机型上这是唯一能低成本换来的额外可用内存。
+if [ -e /sys/block/zram0/disksize ]; then
+  ZRAM_SIZE=${ZRAM_SIZE:-16777216}
+  echo "$ZRAM_SIZE" > /sys/block/zram0/disksize 2>/dev/null
+  if mkswap /dev/zram0 >/dev/null 2>&1 && swapon /dev/zram0 2>/dev/null; then
+    echo "constellation: zram0 swap on ($ZRAM_SIZE bytes)"
+  else
+    echo "constellation: zram0 swap setup failed"
+  fi
+fi
+
+echo 'Constellation (ThinkPad 770ED): starting s6-svscan'
+exec s6-svscan /etc/s6

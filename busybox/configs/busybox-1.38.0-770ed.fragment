@@ -1,0 +1,25 @@
+# Constellation OS — ThinkPad 770ED 追加的 BusyBox applet
+#
+# 基线是 busybox/configs/busybox-1.38.0-M1.config，再叠
+# busybox/configs/busybox-1.38.0-amd64.fragment（同一 BusyBox 版本、
+# 与架构无关的通用命令行工具集）。本文件只补 770ED 这台机器才需要的
+# 硬件勘察/热插拔工具。
+#
+# 应用顺序见 scripts/build-core-770ed.sh：M1 → amd64 fragment → 本文件。
+
+# --- 设备节点与热插拔 ---
+# devtmpfs 已经给出静态节点；mdev 补的是冷插拔（启动时已插入的 CardBus
+# 卡）与后续 mdev -s 的 /dev 补齐。
+CONFIG_MDEV=y
+CONFIG_FEATURE_MDEV_RENAME=y
+
+# --- 硬件勘察：本机全部验收都靠这几条命令 ---
+# lspci/lsusb 从 sysfs 读，不需要外部 libpci/libusb。
+CONFIG_LSPCI=y
+CONFIG_LSUSB=y
+# 帧缓冲模式查询/切换：验证 tridentfb 真的绑上了 1024x768。
+CONFIG_FBSET=y
+# CMOS 时钟：APM 挂起/恢复后对时。
+CONFIG_HWCLOCK=y
+# 查模块信息与依赖链（解释某张 PCMCIA 卡为什么没绑上驱动）。
+CONFIG_MODINFO=y

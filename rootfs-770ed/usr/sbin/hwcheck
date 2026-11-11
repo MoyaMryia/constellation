@@ -1,0 +1,49 @@
+#!/bin/sh
+# ThinkPad 770ED 硬件自检报告。在目标机上直接跑：hwcheck
+# 每个小节对应 docs/thinkpad-770ed.md 里的一项验收。
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
+sec () { echo; echo "== $* =="; }
+
+sec kernel
+uname -a
+
+sec cpu
+grep -E '^(model name|cpu MHz|flags)' /proc/cpuinfo | head -n 3
+
+sec memory
+grep -E '^(MemTotal|MemFree|SwapTotal|SwapFree)' /proc/meminfo
+[ -r /proc/swaps ] && cat /proc/swaps
+
+sec pci
+if command -v lspci >/dev/null 2>&1; then lspci; else ls /sys/bus/pci/devices; fi
+
+sec usb
+if command -v lsusb >/dev/null 2>&1; then lsusb; else ls /sys/bus/usb/devices; fi
+
+sec pcmcia
+for d in /sys/class/pcmcia_socket/*; do
+  [ -e "$d" ] || continue
+  echo "socket ${d##*/}: $(cat "$d/card_type" 2>/dev/null) ready=$(cat "$d/card_ready" 2>/dev/null)"
+done
+cat /proc/ioports 2>/dev/null | grep -i -E 'cardbus|pcmcia' | head -n 5
+
+sec framebuffer
+cat /proc/fb 2>/dev/null || echo "no /proc/fb"
+command -v fbset >/dev/null 2>&1 && fbset 2>/dev/null | head -n 8
+
+sec sound
+cat /proc/asound/cards 2>/dev/null || echo "no /proc/asound (snd-cs4236 未加载或未探测到 CS4237B)"
+cat /proc/asound/devices 2>/dev/null | head -n 5
+
+sec modem
+ls /dev/modems 2>/dev/null || echo "MWave 未初始化（见 /etc/modprobe.d/mwave.conf）"
+
+sec apm
+cat /proc/apm 2>/dev/null || echo "no APM（内核未带 APM 或 BIOS 未提供）"
+
+sec interrupts
+cat /proc/interrupts
+
+sec modules
+lsmod 2>/dev/null | head -n 30

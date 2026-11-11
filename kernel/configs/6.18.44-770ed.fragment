@@ -1,0 +1,220 @@
+# Constellation OS — ThinkPad 770ED (9548/9549) 内核增量
+#
+# 基线：kernel/configs/6.18.44-L4.config（tinyconfig 加法线，i386）。
+# 参考机型：PII 266（Deschutes，MMX）、Intel 440BX + PIIX4、
+#   Trident Cyber9397DVD（PCI 1023:9397）、CS4237B（ISA/PnP）、
+#   MWave 3780i DSP 调制解调器、TI PCI1250 CardBus（104c:ac16）、
+#   PIIX4 UHCI USB、IrDA 1.1（见 docs/thinkpad-770ed.md §6 缺失项）。
+#
+# 目标机 64 MiB 内存，因此"能驱起来"优先于"极简"；但与启动/常驻无关的
+# 驱动一律编译为模块（=m），由 hotplug/mdev 或 init 按需加载。
+
+# ---------------------------------------------------------------- CPU/平台
+# 770ED 是 Pentium II（i686 家族，MPENTIUMII 让 GCC 用 -march=pentium2）。
+# 用户空间仍是 i486 musl 基线，互不影响。
+# CONFIG_M586 is not set
+# CONFIG_M586TSC is not set
+CONFIG_MPENTIUMII=y
+# APM：770ED 的 BIOS 是 APM 1.2（无 ACPI）。PM_SLEEP 是 APM 的依赖闸门。
+# PM_SLEEP 由 SUSPEND 选中；770ED 没有 ACPI，但 APM 挂在 PM_SLEEP 之下。
+CONFIG_PM=y
+CONFIG_SUSPEND=y
+CONFIG_PM_SLEEP=y
+CONFIG_APM=y
+CONFIG_APM_DISPLAY_BLANK=y
+CONFIG_APM_ALLOW_INTS=y
+# MTRR：tridentfb 的写合并靠它，否则 1024x768 控制台滚动会明显拖慢。
+CONFIG_MTRR=y
+
+# ---------------------------------------------------------------- 即插即用
+# ISA PnP 是 CS4237B（声卡）与 PIIX4 上一些遗留设备的发现方式；
+# PNPBIOS 覆盖"BIOS 已把资源写死"的 ThinkPad 实现。
+CONFIG_PNP=y
+CONFIG_PNP_DEBUG_MESSAGES=y
+CONFIG_PNPBIOS=y
+CONFIG_ISAPNP=y
+
+# ---------------------------------------------------------------- 存储
+CONFIG_ATA_PIIX=y
+CONFIG_ATA_GENERIC=y
+# UltraBay II 里的第二块硬盘/CF 转接卡同样走 PIIX 的次通道。
+CONFIG_BLK_DEV_SD=y
+CONFIG_CHR_DEV_SG=m
+CONFIG_BLK_DEV_SR=m
+# 软驱：APM 休眠（Fn+F12）需要它，即使不插软驱也要有驱动。
+CONFIG_BLK_DEV_FD=m
+
+# ---------------------------------------------------------------- 文件系统
+CONFIG_EXT4_FS=y
+CONFIG_FAT_FS=y
+CONFIG_MSDOS_FS=y
+CONFIG_VFAT_FS=y
+CONFIG_FAT_DEFAULT_CODEPAGE=437
+CONFIG_FAT_DEFAULT_IOCHARSET="iso8859-1"
+CONFIG_NLS=y
+CONFIG_NLS_CODEPAGE_437=y
+CONFIG_NLS_CODEPAGE_850=y
+CONFIG_NLS_ISO8859_1=y
+# CF 卡 / 外接 CD-DVD / DVD-Video
+CONFIG_EXFAT_FS=m
+CONFIG_ISO9660_FS=m
+CONFIG_JOLIET=y
+CONFIG_ZISOFS=y
+CONFIG_UDF_FS=m
+
+# ---------------------------------------------------------------- 图形
+# Trident Cyber9397DVD：内核侧只有 tridentfb。做成模块，好让
+# /etc/modprobe.d/tridentfb.conf 里的面板参数（fp/1024x768-16）生效，
+# 并且不和早期 VGA 文本控制台抢设备。
+# vesafb 必须关：它和 tridentfb 会同时绑同一块显示芯片，控制台会停在
+# vesafb 上，tridentfb 只为 /dev/fb1 服务。GRUB 菜单保持文本模式即可。
+CONFIG_FB_VESA=n
+CONFIG_FB_TRIDENT=m
+CONFIG_FRAMEBUFFER_CONSOLE=y
+CONFIG_FRAMEBUFFER_CONSOLE_DETECT_PRIMARY=y
+CONFIG_FONTS=y
+CONFIG_FONT_8x16=y
+CONFIG_FONT_8x8=y
+CONFIG_VGA_CONSOLE=y
+
+# ---------------------------------------------------------------- 输入
+CONFIG_SERIO_I8042=y
+CONFIG_KEYBOARD_ATKBD=y
+CONFIG_MOUSE_PS2=y
+CONFIG_MOUSE_PS2_TRACKPOINT=y
+CONFIG_INPUT_MOUSEDEV=y
+CONFIG_INPUT_EVDEV=y
+
+# ---------------------------------------------------------------- USB（机内）
+# PIIX4 的 UHCI 控制器编入内核：机内唯一的 USB 口必须"不 modprobe 也能用"。
+CONFIG_USB_SUPPORT=y
+CONFIG_USB=y
+CONFIG_USB_UHCI_HCD=y
+CONFIG_USB_EHCI_HCD=m
+CONFIG_USB_OHCI_HCD=m
+CONFIG_USB_ACM=m
+CONFIG_USB_STORAGE=m
+CONFIG_USB_HID=m
+CONFIG_USB_HIDDEV=y
+CONFIG_HID_GENERIC=m
+CONFIG_USB_PRINTER=m
+CONFIG_USB_SERIAL=m
+CONFIG_USB_SERIAL_PL2303=m
+CONFIG_USB_SERIAL_FTDI_SIO=m
+# CardBus USB 卡上常见的网卡（USB-NIC 适配器）
+CONFIG_USB_USBNET=m
+CONFIG_USB_NET_CDCETHER=m
+CONFIG_USB_NET_AX8817X=m
+CONFIG_USB_NET_RNDIS_HOST=m
+CONFIG_USB_NET_PLUSB=m
+
+# ---------------------------------------------------------------- PCMCIA
+# TI PCI1250（104c:ac16）是通用 CardBus 桥，yenta_socket 按 PCI class 匹配。
+# 编入内核：没有它，两个槽位连"插卡"都看不见。
+# PCCARD 是 PCMCIA 的父开关（if PCCARD），不置 y 则下面全部被压成 m。
+CONFIG_PCCARD=y
+CONFIG_PCMCIA=y
+CONFIG_PCMCIA_LOAD_CIS=y
+CONFIG_PCMCIA_PROBE=y
+CONFIG_YENTA=y
+CONFIG_YENTA_ENE_TUNE=y
+CONFIG_YENTA_O2=y
+CONFIG_YENTA_RICOH=y
+CONFIG_YENTA_TI=y
+CONFIG_PCCARD_NONSTATIC=y
+
+# 16 位 PC 卡：有线网卡（世界卡）
+CONFIG_PCMCIA_3C574=m
+CONFIG_PCMCIA_3C589=m
+CONFIG_PCMCIA_AXNET=m
+CONFIG_PCMCIA_FMVJ18X=m
+CONFIG_PCMCIA_NMCLAN=m
+CONFIG_PCMCIA_PCNET=m
+CONFIG_PCMCIA_SMC91C92=m
+CONFIG_PCMCIA_XIRC2PS=m
+# 16 位 PC 卡：串口/并口/Modem 卡
+CONFIG_SERIAL_8250_CS=m
+# 16 位 PC 卡：CF/SM 存储卡（ATA 语义的 CF 适配器走 libata）
+CONFIG_PATA_PCMCIA=m
+
+# ---------------------------------------------------------------- 有线网络
+# CardBus（32 位 PC 卡）在 Linux 里就是普通 PCI 设备，用 PCI 驱动即可。
+CONFIG_NET_VENDOR_3COM=y
+CONFIG_VORTEX=m
+CONFIG_NET_VENDOR_8390=y
+CONFIG_NE2K_PCI=m
+CONFIG_NET_VENDOR_AMD=y
+CONFIG_PCNET32=m
+CONFIG_NET_VENDOR_REALTEK=y
+CONFIG_8139TOO=m
+CONFIG_8139TOO_PIO=y
+CONFIG_R8169=m
+CONFIG_NET_VENDOR_INTEL=y
+CONFIG_E100=m
+CONFIG_E1000=m
+CONFIG_NET_VENDOR_VIA=y
+CONFIG_VIA_RHINE=m
+CONFIG_NET_VENDOR_NATSEMI=y
+CONFIG_NATSEMI=m
+CONFIG_NET_VENDOR_SIS=y
+CONFIG_SIS900=m
+# NET_TULIP 是 bool 菜单开关，TULIP 才是模块。
+CONFIG_NET_TULIP=y
+CONFIG_TULIP=m
+CONFIG_NET_VENDOR_BROADCOM=y
+
+# ---------------------------------------------------------------- 无线
+# 注意：16 位（PCMCIA）无线驱动已在上游移除（orinoco_cs/hostap/atmel/airo
+# 等，最后版本见 docs/thinkpad-770ed.md §5）。当前可用的是 CardBus/PCI 卡。
+CONFIG_WLAN=y
+CONFIG_CFG80211=m
+CONFIG_CFG80211_DEFAULT_PS=y
+CONFIG_MAC80211=m
+CONFIG_MAC80211_MESH=y
+CONFIG_ATH_COMMON=m
+CONFIG_ATH5K=m
+CONFIG_B43=m
+CONFIG_B43_PCI_AUTOSELECT=y
+CONFIG_B43_PCICORE_AUTOSELECT=y
+CONFIG_B43LEGACY=m
+CONFIG_SSB=m
+CONFIG_P54_COMMON=m
+CONFIG_P54_PCI=m
+CONFIG_RTL8180=m
+
+# ---------------------------------------------------------------- 声音
+# CS4237B：snd-cs4236 同时提供 PnP BIOS 与 ISA PnP 两条探测路径。
+CONFIG_SOUND=m
+CONFIG_SND=m
+CONFIG_SND_CS4236=m
+CONFIG_SND_PCM=m
+CONFIG_SND_TIMER=m
+CONFIG_SND_MPU401_UART=m
+CONFIG_SND_OPL3_LIB=m
+CONFIG_SND_WSS_LIB=m
+
+# ---------------------------------------------------------------- 猫
+# MWave 3780i DSP（770ED 的内置 56K 猫）。资源分配要先在 BIOS/ThinkPad
+# 配置里做过一次，否则用 module 参数指定（见 docs/thinkpad-770ed.md）。
+CONFIG_MWAVE=m
+
+# ---------------------------------------------------------------- 串并口
+CONFIG_SERIAL_8250=y
+CONFIG_SERIAL_8250_CONSOLE=y
+CONFIG_SERIAL_8250_PNP=y
+CONFIG_SERIAL_8250_NR_UARTS=4
+CONFIG_SERIAL_8250_RUNTIME_UARTS=4
+CONFIG_PARPORT=m
+CONFIG_PARPORT_PC=m
+CONFIG_PARPORT_PC_PCMCIA=m
+CONFIG_PRINTER=m
+CONFIG_PPDEV=m
+
+# ---------------------------------------------------------------- 其它
+CONFIG_RTC_CLASS=y
+CONFIG_RTC_DRV_CMOS=y
+CONFIG_RTC_HCTOSYS=y
+# mdev/热插拔：CardBus 插卡后按 MODALIAS 自动 modprobe。
+CONFIG_UEVENT_HELPER=y
+CONFIG_UEVENT_HELPER_PATH="/sbin/hotplug"
+CONFIG_FW_LOADER=y
