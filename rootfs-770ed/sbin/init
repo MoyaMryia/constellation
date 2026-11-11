@@ -41,7 +41,8 @@ fi
 #   snd-cs4236 — CS4237B，ISA PnP 探测
 #   floppy     — APM 休眠需要它，哪怕没插软驱
 #   zram       — 6.6 风的 zram 是模块（6.18 风是内置，modprobe 会静默失败）
-for m in tridentfb snd-cs4236 floppy zram; do
+#   snd-mixer-oss — 提供 /dev/mixer，配 /bin/mixer 调音量
+for m in tridentfb snd-cs4236 snd-mixer-oss floppy zram; do
   /sbin/modprobe -q "$m" 2>/dev/null || true
 done
 

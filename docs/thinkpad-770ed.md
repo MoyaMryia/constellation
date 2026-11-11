@@ -35,7 +35,7 @@ IBM PSREF 770ED 概述（LWIK-3TQHC7）。
 | 内存 | 32 MiB 板载 + 64-pin SO-DIMM；288 MiB 可寻址 | `HIGHMEM=n` 足够 | ✅ |
 | 显示 | Trident **Cyber9397DVD**，4 MB SGRAM，PCI `1023:9397` | **`tridentfb`**（模块） | ✅ 面板 1024×768-16 |
 | 显卡 X11 | 同上 | Xorg `trident` 驱动（不在镜像内） | ⚠️ 需自行装 X |
-| 音频 | Crystal **CS4237B**（ISA，SB Pro 兼容） | **`snd-cs4236`** + `PNPBIOS`/`ISAPNP` | ✅ 驱动可绑；无混音器用户态，见 §6 |
+| 音频 | Crystal **CS4237B**（ISA，SB Pro 兼容） | **`snd-cs4236`** + `PNPBIOS`/`ISAPNP`；`snd-mixer-oss` 提供 `/dev/mixer` | ✅ 驱动 + `/bin/mixer` 调主音量（见 §6 的说明） |
 | 猫 | IBM **MWave 3780i** DSP（56K，x2） | **`mwave`**（模块） | ⚠️ 需 BIOS 已分配 DSP 资源；无拨号用户态 |
 | CardBus | **TI PCI1250**（`104c:ac16`），2×Type II / 1×Type III | **`yenta_socket`**（内置） | ✅ 通用 CardBus 桥，按 PCI class 匹配 |
 | USB | PIIX4 UHCI，1 口 USB 1.1 | `USB_UHCI_HCD`（内置）+ `usbhid`/`usb-storage`/`usbserial`/`usbnet` | ✅ |
@@ -164,7 +164,7 @@ sudo dd if=build/constellation-770ed.img of=/dev/sdX bs=4M conv=fsync status=pro
 | **IrDA 1.1**（4 Mbps FIR） | ❌ 不支持 | 上游 IrDA 栈在 **4.14** 被整体移除（`nsc-ircc` 在 4.13 还在）。要留它得回到 4.13，等于放弃整个现代用户空间。 |
 | **DEVA**（MPEG-2 硬解、视频输入/输出） | ❌ 不支持 | 从来没有 Linux 驱动。DVD 数据读取本身没问题（`sr_mod`+`udf`），缺的是硬解与模拟视频口。 |
 | **MWave 3780i 猫** | ⚠️ 驱动在，拨号栈不在 | `mwave` 驱动仍在树内（`drivers/char/mwave`），但：①DSP 资源必须由 BIOS 侧 ThinkPad 配置工具分配过并写进 CMOS；②用户态 `mwavem`+`pppd` 不在镜像里。资源参数示例见 `/etc/modprobe.d/mwave.conf`。 |
-| 声音输出 | ⚠️ 能绑不能调音 | `snd-cs4236` 会注册 `/proc/asound/cards` 与 `/dev/snd/*`；镜像里没有 `alsamixer`/`amixer`（BusyBox 不提供，alsa-utils 需要 alsa-lib）。要出声需装 alsa-utils 并把主音量/Master 通道 unmute 到 0 dB。 |
+| 声音输出 | ⚠️ 有驱动、有音量控制，没有混音界面 | `snd-cs4236` 注册 `/proc/asound/cards` 与 `/dev/snd/*`；ALSA 模拟出的 `/dev/mixer` 配 `tools/mixer.c`（`/bin/mixer`，静态 30 KB）调主音量（`mixer 80`、`mixer mute`）。缺的是 alsa-utils 那套按通道（Mic/PCM/3D）细调的界面——那需要 alsa-lib，与"整个用户空间 = BusyBox + s6"的取舍冲突。 |
 | 风扇/热键/特殊键 | ⚠️ 无 | 此机无 ACPI，`thinkpad_acpi` 用不上；EC（嵌入式控制器）访问要靠 2000 年代那个 out-of-tree 的 `tpctl`/`thinkpad` 模块，不在主线。风扇由 EC 自行控制，Linux 侧不影响安全。 |
 | 休眠（Fn+F12） | ⚠️ 依赖 BIOS | 需要先做休眠分区（`tphdisk`/IBM 工具）并 `fdisk` 把分区类型设为 `a0`。这是 BIOS 行为，与内核无关；镜像不含 `tphdisk`。 |
 | 挂起/电池状态 | ✅ `/proc/apm` | 读 `/proc/apm` 即可看电池与交流状态（`hwcheck` 会打印）。挂起动作本身由 Fn+F4 或 BIOS 触发。 |
@@ -226,4 +226,6 @@ QEMU 没有 440BX+TI1250+Cyber9397DVD+CS4237B 的精确模型，所以下面这�
 | `rootfs-770ed/sbin/init` | PID 1：挂载 → hotplug 助手 → 冷插拔 modalias → zram → s6 |
 | `rootfs-770ed/sbin/hotplug` | uevent 助手：`MODALIAS` → `modprobe -q` |
 | `rootfs-770ed/usr/sbin/hwcheck` | 上机自检报告（§7.2 的那个） |
+| `tools/mixer.c` | OSS 混音器客户端（`/bin/mixer`），补 alsa-utils 的缺口 |
+| `scripts/smoke-770ed.sh` | 镜像冒烟验收（真实引导链 + 登录 + 检查脚本） |
 | `rootfs-770ed/etc/modprobe.d/*.conf` | tridentfb 面板参数、CS4237B 探测、MWave 资源示例 |

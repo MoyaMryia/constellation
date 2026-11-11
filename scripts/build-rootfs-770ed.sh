@@ -52,6 +52,12 @@ for applet in halt poweroff reboot mkswap swapoff swapon modprobe depmod \
 done
 
 cp -a "$S6_ROOT/usr/." "$DEST/usr/"
+
+# OSS 混音器客户端（源码 tools/mixer.c，由 build-core-770ed.sh 编译）
+if [ -x "$ROOT/build/mixer" ]; then
+  cp "$ROOT/build/mixer" "$DEST/bin/mixer"
+  chmod 0755 "$DEST/bin/mixer"
+fi
 cp -a "$MODROOT"/lib/modules/* "$DEST/lib/modules/"
 
 # 模板（先删掉同名软链：cp 默认跟随软链，会写到 /bin/busybox 上）

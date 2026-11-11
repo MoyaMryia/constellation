@@ -218,6 +218,10 @@ CONFIG_WEXT_PRIV=y
 CONFIG_SOUND=m
 CONFIG_SND=m
 CONFIG_SND_CS4236=m
+# OSS 混音器模拟：镜像里没有 alsa-utils，用 40 行的 tools/mixer.c（/bin/mixer）
+# 通过 /dev/mixer 调主音量；也顺带让只认 OSS 的老程序有 /dev/dsp 之外的入口。
+CONFIG_SND_OSSEMUL=y
+CONFIG_SND_MIXER_OSS=m
 CONFIG_SND_PCM=m
 CONFIG_SND_TIMER=m
 CONFIG_SND_MPU401_UART=m

@@ -74,7 +74,8 @@ DHCP 工具和模块加载路径已纳入配置，PCMCIA 联网仍待 86Box/真�
 （i686，bzImage 1.97 MiB）+ 137 个模块 + musl i486 BusyBox/s6，BIOS → MBR/GRUB2
 → bzImage → ext4 root → s6-svscan → `login:` 在 QEMU 下逐条验收通过；23 MiB
 即可启动。驱动覆盖 Trident Cyber9397DVD（tridentfb）、CS4237B（snd-cs4236）、
-MWave 3780i、TI PCI1250 CardBus（yenta）、PIIX4 UHCI USB、APM 1.2，以及成组的
+MWave 3780i、TI PCI1250 CardBus（yenta）、PIIX4 UHCI USB、APM 1.2、CS4237B 的
+`/dev/mixer` 音量控制，以及成组的
 PCMCIA/CardBus 外接卡驱动（16 位有线/串并口/CF/无线 + CardBus 网卡/无线/USB2）。
 缺 IrDA（上游 4.14 移除）、DEVA 硬解（从无驱动）与 MWave 用户态拨号栈；
 详见 [docs/thinkpad-770ed.md](docs/thinkpad-770ed.md)。

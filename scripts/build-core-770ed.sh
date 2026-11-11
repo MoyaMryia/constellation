@@ -141,6 +141,10 @@ make -s -C "$BUSYBOX_SRC" -j"$JOBS" HOSTCC="$HOSTCC" CC="$CC_WRAP"
 "$MUSL_PREFIX/bin/i486-linux-musl-strip" "$BUSYBOX_SRC/busybox"
 cp "$BUSYBOX_SRC/.config" "$ROOT/busybox/configs/busybox-1.38.0-770ed.config"
 
+# ---------- 3b) mixer（OSS 混音器客户端，静态） ----------
+"$CC_WRAP" -I "$HEADERS" -Os -static -o "$ROOT/build/mixer" "$ROOT/tools/mixer.c"
+"$MUSL_PREFIX/bin/i486-linux-musl-strip" "$ROOT/build/mixer"
+
 # ---------- 4) 内核（770ED 配置） ----------
 cp "$KCONFIG" "$KERNEL_SRC/.config"
 make -s -C "$KERNEL_SRC" ARCH=i386 HOSTCC="$HOSTCC" CC="$HOSTCC" olddefconfig
