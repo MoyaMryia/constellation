@@ -1,0 +1,116 @@
+#!/bin/sh
+# Constellation 的 fetch：左边 Mark（拼色 * 号），右边系统信息。
+#
+# 为什么是 shell 而不是真 fastfetch：这台机器是 PII 266 / 64 MiB，而且
+# 整个镜像按"不许出现 SSE 指令"的标准审计过（scripts/audit-sse-770ed.sh）。
+# fastfetch 的构建产物在 32 位 x86 上会带 SSE（memcpy/自动向量化），要它就得
+# 再维护一条 i486 构建线；而 Mark 本身只是一张 14 行 ASCII 图 + 颜色，用
+# busybox 的 awk 拼两栏就够了，零字节二进制、零 SSE 风险。
+#
+# 环境变量：
+#   FETCH_LOGO=/path   指定别处的 logo（默认按终端能力自动挑）
+#   NO_COLOR=1         不输出颜色
+set -u
+
+SELF_DIR=${CONSTELLATION_SHARE:-/usr/share/constellation}
+
+# ---- 1) 选 logo：VGA 文本控制台只认 16 色，真彩色序列会被原样打印 ----
+logo=$SELF_DIR/logo.txt
+case ${TERM:-} in
+  linux|dumb) logo=$SELF_DIR/logo16.txt ;;
+esac
+if [ -n "${FETCH_LOGO:-}" ]; then logo=$FETCH_LOGO; fi
+
+# ---- 2) 采集信息 ----
+hostn=$(cat /etc/hostname 2>/dev/null || uname -n)
+[ -n "$hostn" ] || hostn=constellation
+who=${USER:-$(id -un 2>/dev/null || echo root)}
+
+read_val() { # read_val <file> <key> -> 冒号后面的第一个字段
+  awk -v k="$2" -F: '$1 == k { gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2; exit }' "$1" 2>/dev/null
+}
+
+osname=$(read_val /etc/os-release NAME 2>/dev/null)
+[ -n "$osname" ] || osname="Constellation OS"
+kver=$(uname -r)
+model=$(awk -F: '/model name/ { sub(/^[ \t]+/, "", $2); print $2; exit }' /proc/cpuinfo 2>/dev/null)
+[ -n "$model" ] || model=$(awk -F: '/^cpu model/ { sub(/^[ \t]+/, "", $2); print $2; exit }' /proc/cpuinfo 2>/dev/null)
+[ -n "$model" ] || model=$(uname -m)
+
+mem=$(awk '/^MemTotal:/ { t = $2 }
+           /^MemAvailable:/ { a = $2 }
+           /^MemFree:/ { f = $2 }
+           END {
+             if (t == 0) exit
+             u = (a != "") ? t - a : t - f
+             printf "%d MiB / %d MiB", u / 1024, t / 1024
+           }' /proc/meminfo 2>/dev/null)
+
+swap=$(awk '/^SwapTotal:/ { t = $2 } /^SwapFree:/ { f = $2 }
+            END { if (t > 0) printf "%d MiB / %d MiB", (t - f) / 1024, t / 1024 }' \
+       /proc/meminfo 2>/dev/null)
+
+up=$(awk '{ printf "%d 分钟", $1 / 60 }' /proc/uptime 2>/dev/null)
+
+# 显示环境：有 X 就看窗口管理器是谁（busybox ps 的行尾是参数，得挑出程序名本身）
+wm=$(ps 2>/dev/null | awk '
+  {
+    for (i = 1; i <= NF; i++) {
+      n = split($i, p, "/")
+      if (p[n] ~ /^(jwm|Xvesa|Xorg|icewm|twm|st|busybox)$/) {
+        if (p[n] ~ /^(jwm|icewm|twm)$/) { print p[n]; found = 1; exit }
+        seen = p[n]
+      }
+    }
+  }
+  END { if (seen != "" && !found) print seen }
+')
+case ${wm:-} in
+  jwm|icewm|twm) desk="X11（$wm）" ;;
+  Xvesa|Xorg)    desk="X11（$wm）" ;;
+  *)             desk="tty" ;;
+esac
+
+info=$(mktemp 2>/dev/null || echo /tmp/.fetch.$$)
+cleanup() { rm -f "$info"; }
+trap cleanup EXIT HUP INT TERM
+
+{
+  printf '\033[1m%s@%s\033[0m\n' "$who" "$hostn"
+  printf '%s\n' '--------------------------'
+  printf 'OS:      %s\n' "$osname"
+  printf 'Kernel:  %s\n' "$kver"
+  printf 'CPU:     %s\n' "$model"
+  printf 'Memory:  %s\n' "$mem"
+  [ -n "${swap:-}" ] && printf 'Swap:    %s\n' "$swap"
+  printf 'Uptime:  %s\n' "$up"
+  printf 'Shell:   %s\n' "$(basename "${SHELL:-/bin/sh}")"
+  printf 'Display: %s\n' "$desk"
+  printf 'Disk:    %s\n' "$(df -h / 2>/dev/null | awk 'NR == 2 { printf "%s / %s (%s)", $3, $2, $5 }')"
+} > "$info" 2>/dev/null
+
+# ---- 3) 两栏合并：按"可见宽度"（去掉 ANSI 序列后）算 Padding ----
+if [ ! -s "$info" ]; then
+  cat "$logo" 2>/dev/null
+  exit 0
+fi
+awk '
+  NR == FNR {          # 第一遍：logo
+    art[FNR] = $0
+    s = $0; gsub(/\033\[[0-9;]*m/, "", s)
+    if (length(s) > w) w = length(s)
+    na = FNR
+    next
+  }
+  { info[FNR] = $0; ni = FNR }
+  END {
+    n = (na > ni) ? na : ni
+    for (i = 1; i <= n; i++) {
+      a = (i <= na) ? art[i] : ""
+      t = a; gsub(/\033\[[0-9;]*m/, "", t)
+      gap = w - length(t) + 3
+      if (gap < 1) gap = 1
+      printf "%s%*s%s\n", a, gap, "", (i <= ni) ? info[i] : ""
+    }
+  }
+' "$logo" "$info"

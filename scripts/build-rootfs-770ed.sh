@@ -226,6 +226,13 @@ if [ "$INSTALL_X" = 1 ]; then
   cp "$TMPL/etc/X11/xinit/xinitrc" "$DEST/root/.xinitrc"
   chmod 0755 "$DEST/root/.xinitrc"
 fi
+# fetch：Mark（拼色 * 号）+ 系统信息；logo 有真彩与 16 色两版（VGA 控制台只认 16 色）
+mkdir -p "$DEST/usr/share/constellation"
+cp "$TMPL/usr/bin/fetch" "$DEST/usr/bin/fetch"
+cp "$TMPL"/usr/share/constellation/*.txt "$DEST/usr/share/constellation/"
+cp "$TMPL/etc/motd" "$DEST/etc/motd"
+chmod 0755 "$DEST/usr/bin/fetch"
+
 chmod 0755 "$DEST/sbin/init" "$DEST/sbin/hotplug" "$DEST/usr/sbin/hwcheck" \
   "$DEST/etc/s6/"*/run "$DEST/etc/udhcpc.script"
 
