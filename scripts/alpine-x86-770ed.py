@@ -164,7 +164,7 @@ def deps_of(rec):
     return out
 
 
-def resolve(pkgs, wanted):
+def resolve(pkgs, wanted, allow_excluded=False):
     prov = build_provides(pkgs)
     selected = {}
     queue = list(wanted)
@@ -184,7 +184,7 @@ def resolve(pkgs, wanted):
             continue
         if real in selected:
             continue
-        if real in EXCLUDE:
+        if real in EXCLUDE and not allow_excluded:
             if real not in excluded:
                 excluded.append(real)
             continue
@@ -287,11 +287,13 @@ def main():
     # 吞掉（argparse 的已知行为），导致 "packages are required" 报错。
     ap.add_argument("--path", action="append", default=None,
                     help="只提取匹配该路径/通配的文件（extract 模式，可重复）")
+    ap.add_argument("--allow-excluded", action="store_true",
+                    help="允许安装 EXCLUDE 里的包（只给编译期 staging 用，不要用于 rootfs）")
     ap.add_argument("packages", nargs="+")
     args = ap.parse_args()
 
     pkgs, index_shas = get_index()
-    selected, missing = resolve(pkgs, args.packages)
+    selected, missing = resolve(pkgs, args.packages, args.allow_excluded)
     if missing:
         log("无法解析的依赖：" + ", ".join(sorted(set(missing))))
         raise SystemExit(1)
