@@ -217,6 +217,37 @@ sudo dd if=build/constellation-770ed.img of=/dev/sdX bs=4M conv=fsync status=pro
 - 首次开机后在目标机上跑 `hwcheck`（见 §7），它会按本文件的小节逐项
   打印证据。
 
+## 5.6 串口：内核日志 + 登录 shell
+
+770ED 机身后侧有一个 9 针串口（NS PC97338 SuperI/O）。我们把它当成
+**运维通道**：内核日志和登录 shell 都在上面暴露一份。
+
+内核命令行（mkimage 默认值）：
+
+```
+console=tty0 console=ttyS0,115200n8 earlycon=uart8250,io,0x3f8,115200n8
+```
+
+- `console=tty0` 保留本机屏幕，`console=ttyS0` 让内核日志同时往串口吐；
+- `earlycon=uart8250,io,0x3f8` 从最早的内核初始化就开始打印（连 VGA 还没
+  初始化时也能看到，真机调 tridentfb 时很有用）；
+- 串口参数 **115200 8N1、无流控**，用 null-modem（交叉）线接另一台机器：
+
+```sh
+picocom -b 115200 /dev/ttyUSB0      # 或 screen /dev/ttyUSB0 115200
+```
+
+- 登录：`root`（或你建的账号）。`/etc/securetty` 允许 ttyS0..ttyS3。
+
+**服务怎么挑端口**：770ED 的串口在 BIOS 里可能被关掉，也可能被枚举成
+`ttyS1`（COM2）。`/etc/s6/getty-serial/run` 会按 0→3 找第一个
+`/sys/class/tty/ttySX/type` 非 0 的**真端口**再起 getty；一个都没有就安静
+睡（不刷日志、不占 CPU）。BIOS 里如果 "Serial Port" 是 Disabled，先打开。
+
+**看内核日志**：镜像里带了 `dmesg`（之前缺，已补），串口 shell 上直接
+`dmesg | tail`、`dmesg | grep -i trident`。没有串口线时这些在这台机器的
+本地控制台上同样可用。
+
 ## 6. 已知缺失（以及为什么不做）
 
 | 项目 | 状态 | 原因 |

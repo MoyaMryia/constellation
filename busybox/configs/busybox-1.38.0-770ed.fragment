@@ -26,5 +26,7 @@ CONFIG_FBSET=y
 CONFIG_HWCLOCK=y
 # 查模块信息与依赖链（解释某张 PCMCIA 卡为什么没绑上驱动）。
 CONFIG_MODINFO=y
+# dmesg：串口上没有 console 时也能在 shell 里回看内核日志（真机排障必备）
+CONFIG_DMESG=y
 # X 在 VT2 上跑，退出后切回 VT1 上的 getty。
 CONFIG_CHVT=y

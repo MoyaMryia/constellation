@@ -1,5 +1,15 @@
 #!/bin/sh
-# 串口登录。770ED 机身上没有串口，但 SelectaDock/PC 卡串口或 QEMU 验收
-# 通道都靠它；没有 ttyS0 时退到长睡。
-[ -c /dev/ttyS0 ] || exec /bin/sleep 3600
-exec /bin/getty -L ttyS0 115200 vt100
+# 串口登录。770ED 机身后面有一个 9 针串口（NS PC97338 SuperI/O），但它在
+# BIOS 里可能被关掉、也可能被枚举成 ttyS1（COM2）——所以这里按顺序找一个
+# "真端口"：/sys/class/tty/ttySX/type 非 0 才算真的 8250 端口。
+#
+# 串口参数 115200 8N1，无流控；用 null-modem 线接另一台机器即可登录。
+for n in 0 1 2 3; do
+  t=/dev/ttyS$n
+  [ -c "$t" ] || continue
+  type=$(cat "/sys/class/tty/ttyS$n/type" 2>/dev/null)
+  [ "${type:-0}" = 0 ] && continue
+  exec /bin/getty -L "ttyS$n" 115200 vt100
+done
+# 没有可用串口（纯本机场景）：安静地睡，不刷日志
+exec /bin/sleep 3600

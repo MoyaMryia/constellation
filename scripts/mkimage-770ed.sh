@@ -43,7 +43,7 @@ if [ "${SWAP_MIB:-256}" -gt 0 ]; then ROOT_PART=3; else ROOT_PART=2; fi
 # 猜错就会把根分区 mkswap 掉）。
 SWAP_OPT=
 if [ "$SWAP_MIB" -gt 0 ]; then SWAP_OPT=" cswap=/dev/sda2"; fi
-KERNEL_CMDLINE=${KERNEL_CMDLINE:-"root=/dev/sda$ROOT_PART rootfstype=ext4 init=/sbin/init console=tty0 console=ttyS0,115200$SWAP_OPT"}
+KERNEL_CMDLINE=${KERNEL_CMDLINE:-"root=/dev/sda$ROOT_PART rootfstype=ext4 init=/sbin/init console=tty0 console=ttyS0,115200n8 earlycon=uart8250,io,0x3f8,115200n8$SWAP_OPT"}
 # gfxpayload 只影响 GRUB 自己画的菜单。本风味**不开 vesafb**（否则会和
 # tridentfb 抢同一块显卡，控制台滞留在 vesafb 上），所以默认让 GRUB 保持
 # 文本模式，进内核后再由 tridentfb 切到 1024x768 帧缓冲控制台。
