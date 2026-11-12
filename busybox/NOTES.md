@@ -23,8 +23,8 @@ M1 需要 BusyBox initramfs 在 24 MiB 启动到 shell。用户空间二进制�
      --prefix=$PWD/../../musl-i486 --disable-shared
    make -j16 && make install
    ```
-   注意：musl 的 `musl-gcc.specs` 会覆盖 link spec，需要补上
-   `%{m32:-m elf_i386}` 与 `%{Wl,*}`（本仓库构建时已手动补丁，否则
+    注意：musl 的 `musl-gcc.specs` 会覆盖 link spec，需要补上
+    `%{m32:-m elf_i386}` 与 `%{Wl,*}`（`scripts/build-core.sh` 自动处理，否则
    宿主机 gcc 链接 32 位目标时不会传 `-m elf_i386`，ld 会报
    `skipping incompatible libc.a`）。
 3. **BusyBox 1.38.0**：
@@ -43,10 +43,10 @@ M1 需要 BusyBox initramfs 在 24 MiB 启动到 shell。用户空间二进制�
 
 ## 配置档案
 
-- `busybox/configs/busybox-1.38.0-M1.config` — 最小 M1 配置（static +
+- `busybox/configs/busybox-1.38.0-M1.config` — 最小系统配置（static +
   ash + mount/umount + 基础工具 + `INSMOD`/`RMMOD`/`LSMOD`/
-  `MODPROBE_SMALL`）。注意其中 `CONFIG_EXTRA_CFLAGS` 的
-  `-isystem` 路径是本机绝对路径，换机后需改为对应 `build/hdrs-i386` 路径。
+  `MODPROBE_SMALL` + IPv4 `ip`/`udhcpc`）。头文件路径相对源码树，完整入口见
+  `scripts/build-core.sh`。
 - `busybox/initramfs/init` — initramfs 的 `/init`：安装 applet 符号链接，
   挂载 proc/sysfs/devtmpfs，打印 meminfo，`exec /bin/sh`。
 - `busybox/mkinitramfs.sh` — 生成 `build/initramfs.cpio.gz`；applet
