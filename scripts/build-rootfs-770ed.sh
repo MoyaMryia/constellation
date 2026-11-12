@@ -88,9 +88,14 @@ if [ "$INSTALL_X" = 1 ]; then
     xrdb xmodmap xsetroot xrandr setxkbmap \
     ppp ppp-chat >/dev/null
 
-  # 窗口管理器用**自己编的** JWM：Alpine x86 的 icewm/jwm/fvwm/openbox/
-  # windowmaker 都是 Pentium III(SSE) 基线，在本机（PII，无 SSE）会 SIGILL。
-  # twm 留作兜底（它是纯 C，实测能在 PII 上跑）。
+  # ---- 自编 i486 的 X 栈 ----
+  # Alpine 的 x86 归档是 Pentium III(SSE) 基线：Xorg、libz、libX11、libXt …
+  # 在 770ED 的 Pentium II 上会 SIGILL。三个脚本分别负责：
+  #   build-xlibs：20 个库（含 zlib/pixman/libX11/libXt/libXaw…）
+  #   build-xorg ：服务器 + fbdev/kbd/mouse 驱动 + xkbcomp + 动态 musl
+  #   build-jwm  ：窗口管理器（IceWM 风格）
+  ROOTFS_DEST="$DEST" JOBS="${JOBS:-4}" "$ROOT/scripts/build-xlibs-770ed.sh" >/dev/null
+  ROOTFS_DEST="$DEST" JOBS="${JOBS:-4}" "$ROOT/scripts/build-xorg-770ed.sh" >/dev/null
   ROOTFS_DEST="$DEST" JOBS="${JOBS:-4}" "$ROOT/scripts/build-jwm-770ed.sh" >/dev/null
 
   # 固件：只带能合法取到的那些（见 docs/thinkpad-770ed.md §6）。

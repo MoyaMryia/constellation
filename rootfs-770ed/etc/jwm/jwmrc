@@ -59,19 +59,19 @@
   </MenuStyle>
 
   <RootMenu labeled="true" height="20">
-    <Program label="终端 (xterm)" icon="xterm">xterm -fa "DejaVu Sans Mono" -fs 11</Program>
+    <Program label="终端 (st)" icon="xterm">st</Program>
     <Program label="文件管理器 (mc)" icon="folder">mc</Program>
     <Program label="系统自检 (hwcheck)" icon="info">xterm -e hwcheck</Program>
     <Separator/>
     <Menu label="网络">
       <Program label="DHCP 续租">udhcpc -i eth0 -n -q</Program>
-      <Program label="接口信息">xterm -e "ip addr; sleep 30"</Program>
+      <Program label="接口信息">st -e sh -c "ip addr; sleep 30"</Program>
     </Menu>
     <Menu label="硬件">
-      <Program label="PCI 设备">xterm -e "lspci; sleep 30"</Program>
-      <Program label="USB 设备">xterm -e "lsusb; sleep 30"</Program>
-      <Program label="帧缓冲模式">xterm -e "fbset; sleep 30"</Program>
-      <Program label="声音音量">xterm -e "mixer; mixer 80; sleep 3"</Program>
+      <Program label="PCI 设备">st -e sh -c "lspci; sleep 30"</Program>
+      <Program label="USB 设备">st -e sh -c "lsusb; sleep 30"</Program>
+      <Program label="帧缓冲模式">st -e sh -c "fbset; sleep 30"</Program>
+      <Program label="声音音量">st -e sh -c "mixer; mixer 80; sleep 3"</Program>
     </Menu>
     <Separator/>
     <Restart label="重启窗口管理器"/>

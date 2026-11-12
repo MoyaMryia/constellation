@@ -168,6 +168,32 @@ build_auto "xf86-input-mouse-1.9.5" \
 build_auto "xkbcomp-1.4.7" \
   "https://www.x.org/releases/individual/app/xkbcomp-1.4.7.tar.xz" "$XKBCOMP_SHA"
 
+# ---------- 4a) st：终端模拟器（Xft + fontconfig，32 KB 级） ----------
+# 不用 Alpine 的 xterm：xterm 自身就是 SSE 基线（实测直接 SIGILL），
+# 而 st 只有 4 个源文件，用我们的工具链重编后 SSE 指令为 0。
+build_st () {
+  url=https://dl.suckless.org/st/st-0.9.2.tar.gz
+  sha=6b215d4f472b21d6232f30f221117a777e24bcfee68955ddefb7426467f9494b
+  fetch_verify "$url" "$sha"
+  dir=$SRCROOT/st-0.9.2
+  [ -d "$dir" ] || tar -C "$SRCROOT" -xf "$SRCROOT/st-0.9.2.tar.gz"
+  ( cd "$dir" && export PATH=$MUSL_PREFIX/bin:$PATH && rm -f st config.h && \
+    env -u PKG_CONFIG_PATH \
+      PKG_CONFIG_LIBDIR="$ROOT/build/xlibs-770ed/usr/lib/pkgconfig:$STAGE/usr/lib/pkgconfig:$STAGE/usr/share/pkgconfig" \
+      PKG_CONFIG_SYSROOT_DIR="$STAGE" \
+      make CC=i486-linux-musl-gcc \
+        CFLAGS="-Os -march=i486 -fno-stack-protector -I$STAGE/usr/include -I$ROOT/build/xlibs-770ed/usr/include -L$ROOT/build/xlibs-770ed/usr/lib" \
+        LDFLAGS="-L$ROOT/build/xlibs-770ed/usr/lib -L$STAGE/usr/lib -L$STAGE/lib -Wl,-rpath-link,$ROOT/build/xlibs-770ed/usr/lib -Wl,-rpath-link,$STAGE/usr/lib" \
+        X11INC="$STAGE/usr/include" X11LIB="$STAGE/usr/lib" >/dev/null 2>&1 )
+  if objdump -d "$dir/st" | grep -qE 'movups|movaps|movdqa'; then
+    echo "st: 二进制含 SSE 指令" >&2; exit 1
+  fi
+  cp "$dir/st" "$DEST/usr/bin/st"
+  chmod 0755 "$DEST/usr/bin/st"
+  echo "st: 安装完成（$(stat -c%s "$DEST/usr/bin/st") 字节）"
+}
+build_st
+
 # ---------- 4b) probe：诊断 SIGILL 落在哪个共享库 ----------
 "$CC_WRAP" -Os -static -o "$DEST/usr/bin/probe" "$ROOT/tools/probe.c"
 echo "xorg: probe 安装完成（/usr/bin/probe <程序> 可定位 SIGILL 的库）"

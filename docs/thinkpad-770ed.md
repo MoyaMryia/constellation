@@ -181,47 +181,48 @@ sudo dd if=build/constellation-770ed.img of=/dev/sdX bs=4M conv=fsync status=pro
 | 挂起/电池状态 | ✅ `/proc/apm` | 读 `/proc/apm` 即可看电池与交流状态（`hwcheck` 会打印）。挂起动作本身由 Fn+F4 或 BIOS 触发。 |
 | 无线固件 | ⚠️ 不含 | `b43`/`atmel`/`spectrum`/`p54` 需要 `/lib/firmware` 中的固件；镜像不带（许可证与体积原因）。dmesg 会点名要哪个文件。 |
 
-## 6.1 图形桌面：X 已经跑起来了（自编 i486 版）
+## 6.1 图形桌面：已跑通（自编 i486 版 X + JWM + st）
 
-Alpine 的 **x86** 归档基线是 Pentium III（SSE），这是这次最大的坑。770ED 是
-Pentium II，没有 SSE，于是"装个 X 就能用"的路走不通——**实测每撞一次就抓到
-一个库**（用 `usr/bin/probe` 这个 ptrace 小工具定位 SIGILL 落在哪个 .so）：
+Alpine 的 **x86** 归档基线是 Pentium III（SSE）。770ED 是 Pentium II，没有
+SSE，所以"装个 X 就能用"走不通。做法：用 `tools/probe.c`（ptrace 探针，
+定位 SIGILL 落在哪个 .so 的哪个偏移）逐个抓出肇事库，再用本工程 musl i486
+工具链重编。**最终清单（每个都实测 SSE 指令 = 0）**：
 
-| 撞到的库 | 症状 | 处置 |
-|---|---|---|
-| `libpciaccess` | `pci_slot_match_iterator_create` 里用 `movups` 拷贝结构体 | 自编 |
-| `libpixman` | 服务器初始化即 SIGILL | 自编（`-Dsse2/mmx/ssse3=disabled`） |
-| `libz` | inflate/CRC 快速路径 | 自编（`configure --archs="-march=i486"`） |
-| `libXfont2` / `libfontenc` / `libXau` / `libXdmcp` / `libmd` / `libxcvt` | 字体/认证初始化 | 自编 |
-| `libX11` / `libxcb` / `libxkbfile` | `xkbcomp` 编译键表时 SIGILL | 自编 |
-| `libudev`(eudev) | evdev 驱动初始化时 SIGILL | 改用 `kbd`+`mouse` 驱动，服务器 `-Dudev=false`，彻底不用 udev |
-
-另外两个必须记住的细节：
-
-1. **X 服务器必须动态链接 musl**。本工程的工具链原来是纯静态 musl，静态 libc
-   的 `dlopen` 是空实现，服务器加载驱动模块会直接报
-   `Failed to load fbdev_drv.so: Dynamic loading not supported`。
-   现在 `build-core-770ed.sh` 用 `--enable-shared` 建 musl，并把
-   `/lib/libc.so` + `/lib/ld-musl-i486.so.1` 装进 rootfs（与 Alpine 的
-   `/lib/ld-musl-i386.so.1` 各自服务各自那批二进制，互不干扰）。
-2. **`-fno-stack-protector`**：宿主 gcc 默认开 SSP，会引用 glibc 的
-   `__stack_chk_fail_local`，musl 没有这个符号（链接期报 undefined）。
-
-现状（QEMU `-cpu pentium2` 实测）：
-
-| 组件 | 状态 |
+| 层 | 重编的东西 |
 |---|---|
-| 帧缓冲 | ✅ `vesafb`（QEMU）/ `tridentfb`（真机），1024×768×16 |
-| **X 服务器（自编 21.1.14）** | ✅ 起屏成功：`FBDEV(0): Depth 16`、扩展初始化、`Mouse0: ps2EnableDataReporting: succeeded`，退出时 `Server terminated successfully (0)`，全程无 SIGILL |
-| 输入 | ✅ `kbd` 驱动 + `mouse` 驱动（PS/2，TrackPoint 走 `/dev/input/mice`） |
-| 键表 | ✅ 自编 `xkbcomp` 可用（`XkbDisable` 不再需要） |
-| **窗口管理器 JWM（自编 2.4.6）** | ✅ `jwm -f /etc/jwm/jwmrc` 在 PII 上跑起来（ps 可见），IceWM 风格任务栏/菜单 |
-| 会话自启（`/usr/bin/x`） | ⚠️ 一次性验通过，最后一轮重编后又出现"客户端先退导致 X 正常退出"的现象，属会话接线问题（不是 SSE），待一轮调试 |
-| 终端 xterm / xrdb | ❌ Alpine 版仍 SSE（`libXt`/自身），需要照同样办法自编 |
+| 压缩/图形 | `zlib`、`pixman`（`-Dsse2=disabled -Dmmx=disabled`） |
+| 系统 | `libmd`、`libxcvt`、`libpciaccess` |
+| 字体链 | `libexpat`、`freetype`、`fontconfig`、`libfontenc`、`libXfont2`、`libXft` |
+| X 协议/客户端 | `libXau`、`libXdmcp`、`libxcb`、`libX11`、`libxkbfile`、`libICE`、`libSM`、`libXt`、`libXmu`、`libXpm`、`libXext`、`libXrender`、`libXaw` |
+| 服务器与驱动 | `xorg-server 21.1.14`、`xf86-video-fbdev`、`xf86-input-keyboard`、`xf86-input-mouse`、`xkbcomp 1.4.7` |
+| 桌面 | `JWM 2.4.6`（IceWM 风格任务栏/菜单）、`st 0.9.2`（终端） |
 
-复现：`scripts/build-xlibs-770ed.sh`（10 个库）+ `scripts/build-xorg-770ed.sh`
-（服务器 + fbdev/kbd/mouse 驱动 + xkbcomp）+ `scripts/build-jwm-770ed.sh`。
-每个脚本结束都会打印"SSE 指令计数"，全 0 才算过。
+四个必须记住的坑：
+
+1. **X 服务器必须动态链接 musl**：工具链原来是纯静态 musl，静态 libc 的
+   `dlopen` 是空实现，加载驱动会报 `Dynamic loading not supported`。现在
+   musl 用 `--enable-shared` 建，`/lib/libc.so` + `/lib/ld-musl-i486.so.1`
+   随镜像安装（与 Alpine 的 `ld-musl-i386.so.1` 各自服务各自那批二进制）。
+2. **`-fno-stack-protector`**：宿主 gcc 默认开 SSP，引用 glibc 的
+   `__stack_chk_fail_local`，musl 没有这个符号。
+3. **evdev 驱动硬依赖 libudev，而 eudev 也是 SSE** → 改用 `kbd` + `mouse`
+   驱动，服务器 `-Dudev=false`，进程里彻底没有 udev。
+4. **要挂 `devpts`**：没有它 `st`/`xterm` 报 `openpty failed`（init 里已挂
+   `/dev/pts`）。
+
+实测（QEMU `-cpu pentium2 -m 64`，`gfxpayload=1024x768x16`）：
+
+```
+# sh /usr/bin/x &            ← 起在 VT2：fbdev + kbd + mouse + JWM
+==PS
+  947 root  /usr/bin/jwm -f /etc/jwm/jwmrc
+  949 root  st -e sh -c echo hello-from-st; sleep 40
+==XLOG  0        ← Xorg 日志里 Fatal/Illegal 计数为 0
+traps: (内核日志里 0 条 invalid opcode)
+```
+
+真机路径不变：`tridentfb` 提供 `/dev/fb0`（1024×768×16）→ X 走 `fbdev`
+驱动；`Keyboard0`/`Mouse0` 用 kbd/mouse（TrackPoint 走 `/dev/input/mice`）。
 
 ## 7. 验收
 

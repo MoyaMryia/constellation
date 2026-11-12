@@ -20,6 +20,10 @@ export PATH=/bin:/sbin:/usr/bin:/usr/sbin
 mountpoint -q /dev  || mount -t devtmpfs devtmpfs /dev
 mountpoint -q /proc || mount -t proc proc /proc
 mountpoint -q /sys  || mount -t sysfs sysfs /sys
+# devpts：终端模拟器（st/xterm）要 openpty()，没有 /dev/ptmx 就报
+# "openpty failed"。devtmpfs 只有 /dev/ptmx 节点，pty 主从对要 devpts 提供。
+mkdir -p /dev/pts
+mountpoint -q /dev/pts || mount -t devpts devpts /dev/pts -o gid=5,mode=0620
 
 grep -q '^proc /proc proc' /proc/mounts || exec sh
 grep -q '^sysfs /sys sysfs' /proc/mounts || exec sh

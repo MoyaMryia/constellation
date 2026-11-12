@@ -32,7 +32,16 @@ fetch () {
   file=$SRCROOT/${url##*/}
   if [ ! -f "$file" ]; then
     echo "xl: 下载 ${url##*/}"
-    curl --fail --location --proto '=https' --silent --show-error -o "$file.tmp" "$url"
+    # x.org 的 CDN 偶发 SSL EOF；重试 + 换镜像
+    ok=0
+    for try in 1 2 3; do
+      if curl --fail --location --proto '=https' --silent --show-error \
+              --retry 3 --retry-all-errors -o "$file.tmp" "$url" 2>/dev/null; then
+        ok=1; break
+      fi
+      sleep 2
+    done
+    [ "$ok" = 1 ] || { echo "xl: 下载失败 ${url##*/}" >&2; exit 1; }
     mv "$file.tmp" "$file"
   fi
 }
@@ -43,6 +52,7 @@ if [ ! -f "$STAGE/usr/include/X11/Xlib.h" ]; then
     libx11-dev libxext-dev libxfixes-dev libxrender-dev libxau-dev libxdmcp-dev \
     libfontenc-dev libxfont2-dev libpciaccess-dev libxcvt-dev libxshmfence-dev \
     libmd-dev libpng-dev freetype-dev zlib-dev libxcb-dev xorgproto xtrans \
+    fontconfig-dev expat-dev freetype-dev libpng-dev libxpm-dev libxmu-dev \
     pkgconf util-macros font-util >/dev/null
 fi
 
@@ -89,11 +99,16 @@ build_auto () {
   [ -d "$dir" ] || tar -C "$SRCROOT" -xf "$SRCROOT/${url##*/}"
   ( cd "$dir" && export PATH=$ROOT/toolchain/musl-i486/bin:$PATH && \
     [ -x configure ] || ./autogen.sh >/dev/null 2>&1 || true; \
-    env -u PKG_CONFIG_PATH ./configure --host=i486-linux-musl --build="$(uname -m)-linux-gnu" \
-      --prefix=/usr CC=i486-linux-musl-gcc \
+    env -u PKG_CONFIG_PATH xorg_cv_malloc0_returns_null=no \
+      ./configure --host=i486-linux-musl --build="$(uname -m)-linux-gnu" \
+      --prefix=/usr --disable-malloc0returnsnull CC=i486-linux-musl-gcc \
       CFLAGS="-Os -march=i486 -fno-stack-protector" CPPFLAGS="-I$STAGE/usr/include" \
       LDFLAGS="-L$STAGE/usr/lib -L$STAGE/lib -Wl,-rpath-link,$STAGE/usr/lib -Wl,-rpath-link,$STAGE/lib" >/dev/null && \
     make -j"$JOBS" >/dev/null && make install DESTDIR="$STAGE" >/dev/null )
+  # .la 里记的是宿主的绝对路径（/usr/lib/xxx.la），后续包用 libtool 链接时
+  # 会去读它并失败（"is not a valid libtool archive"）。删掉即可，libtool
+  # 会退回用 -lxxx。
+  rm -f "$STAGE"/usr/lib/*.la
   echo "xl: $name 完成"
 }
 
@@ -126,7 +141,7 @@ build_meson libxcvt       https://www.x.org/releases/individual/lib/libxcvt-0.1.
 # ---- 客户端侧（xkbcomp / JWM / xterm 都要）：同样必须 i486 重编 ----
 # xcb-proto 的代码生成器要跑 python3，所以用宿主 python（只生成 .c/.h）
 build_xcb_proto () {
-  fetch https://xorg.freedesktop.org/archive/individual/proto/xcb-proto-1.17.0.tar.xz
+  fetch https://www.x.org/releases/individual/proto/xcb-proto-1.17.0.tar.xz
   dir=$SRCROOT/xcb-proto-1.17.0
   [ -d "$dir" ] || tar -C "$SRCROOT" -xf "$SRCROOT/xcb-proto-1.17.0.tar.xz"
   ( cd "$dir" && env -u PKG_CONFIG_PATH ./configure --prefix=/usr >/dev/null && \
@@ -136,7 +151,7 @@ build_xcb_proto () {
 build_xcb_proto
 # libxcb 的生成脚本用 xcbproto 的 python 模块
 build_libxcb () {
-  fetch https://xorg.freedesktop.org/archive/individual/lib/libxcb-1.17.0.tar.xz
+  fetch https://www.x.org/releases/individual/lib/libxcb-1.17.0.tar.xz
   dir=$SRCROOT/libxcb-1.17.0
   [ -d "$dir" ] || tar -C "$SRCROOT" -xf "$SRCROOT/libxcb-1.17.0.tar.xz"
   py=$(ls -d "$STAGE"/usr/lib/python3* 2>/dev/null | head -1)
@@ -167,10 +182,31 @@ build_libX11 () {
         LDFLAGS="-L$STAGE/usr/lib -L$STAGE/lib -Wl,-rpath-link,$STAGE/usr/lib -Wl,-rpath-link,$STAGE/lib" \
         --disable-malloc0returnsnull >/dev/null && \
     make -j"$JOBS" >/dev/null && make install DESTDIR="$STAGE" >/dev/null )
+  rm -f "$STAGE"/usr/lib/*.la
   echo "xl: libX11 完成"
 }
 build_libX11
 build_auto  libxkbfile    https://www.x.org/releases/individual/lib/libxkbfile-1.1.3.tar.xz
+# ---- 文本渲染链：st/xterm 走 Xft → fontconfig → freetype/expat ----
+# 实测 st 起终端时死在 Alpine 的 libexpat（SSE）。这三个也照同样办法重编。
+build_auto  expat         https://github.com/libexpat/libexpat/releases/download/R_2_6_2/expat-2.6.2.tar.xz
+build_meson freetype      https://download.savannah.gnu.org/releases/freetype/freetype-2.13.3.tar.xz \
+             -Dbrotli=disabled -Dbzip2=disabled -Dharfbuzz=disabled -Dpng=enabled -Dzlib=enabled
+# fontconfig：实测 st 起终端时第二次 SIGILL 就落在它身上（Alpine 版 66 条 SSE）
+build_meson fontconfig    https://www.freedesktop.org/software/fontconfig/release/fontconfig-2.15.0.tar.xz \
+             -Ddoc=disabled -Dtests=disabled -Dtools=disabled
+
+# ---- 客户端用到的 X 库（xterm/xrdb 走这些；同样必须 i486） ----
+# 顺序：ICE/SM → Xt → Xmu → Xpm → Xext/Xrender → Xft → Xaw
+build_auto  libICE        https://www.x.org/releases/individual/lib/libICE-1.1.1.tar.xz
+build_auto  libSM         https://www.x.org/releases/individual/lib/libSM-1.2.4.tar.xz
+build_auto  libXt         https://www.x.org/releases/individual/lib/libXt-1.3.1.tar.xz
+build_auto  libXmu        https://www.x.org/releases/individual/lib/libXmu-1.2.1.tar.xz
+build_auto  libXpm        https://www.x.org/releases/individual/lib/libXpm-3.5.17.tar.xz
+build_auto  libXext       https://www.x.org/releases/individual/lib/libXext-1.3.6.tar.xz
+build_auto  libXrender    https://www.x.org/releases/individual/lib/libXrender-0.9.11.tar.xz
+build_auto  libXft        https://www.x.org/releases/individual/lib/libXft-2.3.8.tar.xz
+build_auto  libXaw        https://www.x.org/releases/individual/lib/libXaw-1.0.16.tar.xz
 # libtool 的 .la 会记住宿主的 /usr/lib 绝对路径，先清掉再给后续包用
 rm -f "$STAGE"/usr/lib/*.la
 
@@ -211,7 +247,10 @@ echo "xl: 目标 $DEST"
 echo "xl: SSE 自检（应全部为 0）："
 for so in libz.so.1 libpixman-1.so.0 libpciaccess.so.0 libXau.so.6 libXdmcp.so.6 \
           libXfont2.so.2 libfontenc.so.1 libmd.so.0 libxcvt.so.0 \
-          libxcb.so.1 libX11.so.6 libxkbfile.so.1; do
+          libxcb.so.1 libX11.so.6 libxkbfile.so.1 \
+          libexpat.so.1 libfreetype.so.6 libfontconfig.so.1 \
+          libICE.so.6 libSM.so.6 libXt.so.6 libXmu.so.6 libXmuu.so.1 \
+          libXpm.so.4 libXext.so.6 libXrender.so.1 libXft.so.2 libXaw.so.7; do
   f=$(ls "$DEST"/usr/lib/$so* 2>/dev/null | head -1)
   [ -n "$f" ] || continue
   printf '  %-20s %s\n' "$so" "$(objdump -d "$f" | grep -cE 'movups|movaps|movdqa|pxor')"
