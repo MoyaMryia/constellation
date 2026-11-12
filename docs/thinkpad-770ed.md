@@ -434,3 +434,49 @@ QEMU 没有 440BX+TI1250+Cyber9397DVD+CS4237B 的精确模型，所以下面这�
 | 安装器 UI | ❌ 无 | 现在就是 dd 镜像 + `install-disk-770ed.sh`。 |
 | 真机验收 | ⏳ 待做 | tridentfb 面板参数、CS4237B PnP 探测、CardBus 插卡、APM、USB 都只在 QEMU 近似模型下验过。 |
 
+## 11. 要不要逆向一份驱动？（决策记录）
+
+结论先给：**显卡不逆向；EC/SMAPI 值得做，但那是"移植 + 黑盒验证"，不是从零逆向。**
+
+### 11.1 手上这份 NT4 驱动里有什么
+
+`~/Downloads/nt4020-06.exe`（252 KB，自解压 zip，1997/2000 年的 Trident 官方包）：
+
+| 文件 | 大小 | sha256 前 16 | 里面是什么 |
+|---|---|---|---|
+| `SGIULNT.SYS` | 96 KB | `9184053bd3010269` | NT4 显示 **miniport**：`VideoPort*` 调用 + **TV-out 辅助函数**（`_GetTVStatus`、`_GetScaleTVInformation`、`_GetComScaleTVSupportLevel`、`_GetTVRetrace`、`_GetCaptureBufferVerPCIBios`、`_EnableTvgaLinearBase`） |
+| `SGIUL40.dll` | 364 KB | `980058b7fd987b5f` | NT 显示驱动（GDI 加速）+ **DirectDraw 覆盖层入口**：`_EnableOverlay`、`_DdUpdateOverlay`、`_SetOverlaySrc`、`_SetOverlayDest`、`_bMPEG2Mode` |
+| `TDISPLUS.DLL` | 129 KB | `4e72b2f914383142` | 控制面板（TV/视频捕获设置） |
+| `TRIDENT.INF` / `README` | — | — | 安装信息 + **分辨率/色深支持表** |
+
+README 里那张表很实用（4 MB 显存）：`1024x768` 支持到 **32bpp**（16.7M 色），
+`1280x1024`/`1600x1200` 只到 16bpp。这一条已经采纳：我们的 X 配置里
+`Depth 24` 现在也给 `1024x768`（以前按 1998 年那份 XF86Config 只给到 800x600，
+是 XFree86 3.3 的保守值）。
+
+### 11.2 逆向它能换来什么、要付多少
+
+| 目标 | NT4 驱动里有没有线索 | 工作量 | 值不值 |
+|---|---|---|---|
+| **2D 加速**（填充/位块/画线） | 有，但 Linux 侧 `tridentfb` 已经做了（fillrect/copyarea/imageblit） | — | ❌ 不需要 |
+| **直接写屏外的模式/PLL 表** | miniport 里没有静态模式表（读 EDID + 计算），只有 README 的支持矩阵 | 1 天（挖表） | ⚠️ 收益小：`tridentfb` 用标准时序 + 我们的 modprobe 参数已经够 |
+| **TV-out**（DEVA 的电视输出） | ✅ 有导出的 TV 函数，是明确入口 | 1–2 周（无反汇编符号，纯黑盒 + 真机示波器级验证） | ⚠️ 只有你有 DEVA + 电视才用得上 |
+| **DirectDraw 覆盖层 → Linux Xv** | ✅ `_EnableOverlay/_SetOverlaySrc/_DdUpdateOverlay` 是入口 | 2–4 周（要逆寄存器序列 + 写 Xv/DRM 驱动） | ❌ 对 PII 266 意义有限：覆盖层只是"显示 YUV 并缩放"，解码还得靠 CPU 或 DEVA（DEVA 的 MPEG-2 解码器完全没有 Linux 驱动，那是第二个逆向项目） |
+| **EC/SMAPI**（风扇、温度、Fn、电视切换） | 不在这份驱动里 | 移植 tpctl 的 SMAPI 调用（有 GPL 源码当地图）+ 真机联调 | ✅ **唯一值得做的**，见 §10 |
+
+### 11.3 还有一个"不用逆向"的选项，已经排除了
+
+Xorg 有自己的 `xf86-video-trident`（1.4.0）。看起来很香——但 9397/DVD 系列的
+加速路径在源码里只有 `image_xaa.c`（**XAA**），而 Xorg ≥1.19 已经把 XAA 删了，
+`configure` 直接报 `checking for xaa.h... no` / `XAA support... no`。也就是说
+编出来的原生驱动在我们这套 Xorg 21 上**没有 2D 加速**，模式和 `fbdev` 一样走
+通用路径，反而多一份没维护的驱动。结论：**继续用 `tridentfb` + X 的 `fbdev`**。
+
+### 11.4 所以现在的取舍
+
+1. 显卡：`tridentfb`（面板 1024x768，16bpp 默认、32bpp 可选）+ X `fbdev` 驱动，
+   不逆向、不编 xf86-video-trident。
+2. NT4 驱动**不入库**（第三方二进制，许可证不明），只在这里记录来源、哈希与
+   内容清单；将来真要做 TV-out/覆盖层，从 §11.1 那几个导出函数入手。
+3. EC/SMAPI 是下一步唯一值得投入的逆向/移植对象，前提是拿到真机做实验台。
+

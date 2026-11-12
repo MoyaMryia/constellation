@@ -94,10 +94,12 @@ Section "Screen"
         # 1024x768 是面板原生分辨率；后面两个是外接 CRT 时用的退路。
         Modes "1024x768" "800x600" "640x480"
     EndSubSection
-    # 4 MB SGRAM 下 24/32bpp 只到 800x600（1998 年那份配置也是这么写的）
+    # 24bpp：Trident 自己的 NT4 驱动 README 明确写了"1024x768 32bpp 需要 4 MB"，
+    # 我们正好是 4 MB SGRAM，所以 1024x768x32 是可行的（1024*768*4 = 3 MB）。
+    # 1998 年那份 XF86Config 只写 800x600，是当时 XFree86 3.3 的保守取值。
     SubSection "Display"
         Depth 24
-        Modes "800x600" "640x480"
+        Modes "1024x768" "800x600" "640x480"
     EndSubSection
 EndSection
 
