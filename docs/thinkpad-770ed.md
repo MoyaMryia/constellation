@@ -603,3 +603,92 @@ Xorg/jwm/st 全部报 `not found`（找不到 interpreter）。现在两个名�
 镜像 67 MB；`constellation-770ed.img` / `-g4d.img` 各 3985 MB（4 GB CF 卡）。
 桌面实跑：`Xorg + JWM + st` 同时在线，内核日志 0 条 `invalid opcode`。
 
+## 13. 另一条路：BasicLinux 3.5 LCARS（kernel 2.2.26，PII 专用内核）
+
+除了本仓库自己的 6.6.162 + Xorg 方案，还有一条"极端复古"的路线：
+[queenkjuul/basiclinux-lcars](https://github.com/queenkjuul/basiclinux-lcars)
+——BasicLinux 3.5 的 LCARS（Star Trek 界面）分支，原版能在 **386DX + 4 MB**
+上跑完整桌面，内核是 Linux 2.2.26。
+
+`scripts/build-lcars-770ed.sh` 把它做成一份同样能写进 4 GB CF 卡的镜像：
+
+```sh
+git clone --depth 1 https://github.com/queenkjuul/basiclinux-lcars ~/Downloads/basiclinux-lcars
+sudo LCARS_SRC=~/Downloads/basiclinux-lcars scripts/build-lcars-770ed.sh
+# → build/constellation-770ed-lcars.img（3800 MiB，grub4dos）
+```
+
+### 13.1 上游自带按 CPU 编的内核（"PII 专用镜像"就是这个）
+
+`livecd/kernels/` 里有四份，`livecd/docs/config.txt` 里写明了对应关系：
+
+| 文件 | CONFIG | 适用 |
+|---|---|---|
+| `zimage.4dx` | `CONFIG_M486` | 486DX |
+| `zimage.p1` | `CONFIG_M586TSC` | Pentium（有 TSC） |
+| **`zimage.p2`** | **`CONFIG_M686`** | **Pentium II —— 770ED 用这份** |
+| `bzimage.big` | `CONFIG_M386` | 通用大内核（模块齐全） |
+
+用的是 M686 编译，`CMOV`/`FCOMI` 都能用；PII 有 CMOV，所以没问题（SSE 不在这条线里，
+内核是 `-mno-sse` 编译的）。
+
+### 13.2 我们改了什么：不走 DOS + LOADLIN
+
+上游必须从 MS-DOS 用 `LOADLIN.EXE` 起 `ZIMAGE`，root 是一个 loop 挂载的
+`FS.IMG`（整个系统在 ramdisk 里跑，适合 CD）。本脚本改成：
+
+- **grub4dos 直接引导 `zimage.p2`**，`root=/dev/hda3` 是真实的 ext2 分区
+  —— 不占内存、不用 DOS、不用 ramdisk（770ED 有 64 MiB，全给系统）
+- 分区布局与主镜像一致：`p1` FAT16 64 MiB（grub4dos + `/baslin/`）、
+  `p2` swap 256 MiB、`p3` ext2（上游 `rootfs/`，约 871 MB）
+- `/etc/rc` 里加 `swapon /dev/hda2`，首次启动自动 `mkswap`（上游只认 swap.img 文件）
+- `/etc/inittab` 加 `ttyS0::askfirst:-/bin/sh`，串口能拿到登录 shell
+
+### 13.3 两个必须自己补的上游坑
+
+1. **仓库里所有文件都是 0644**（`git ls-files` 里 0 个 100755，大概是从不保留权限的
+   环境提交的）。不补可执行位，内核 exec `/sbin/init` 直接失败，症状是
+   `Kernel panic: No init found. Try passing init= option to kernel.`
+   脚本按 ELF / `#!` 魔术字节给 1500 多个文件补 `+x`。
+2. **`rootfs/dev/` 是空的**（git 存不了设备文件，只剩一个 `mouse` 软链）。必须
+   自己 `mknod`：`console`(5,1)、`null`、`zero`、`mem`、`tty0-8`、`ttyS0/1`、
+   `hda/hda1-4`、`ram0-2`、`loop0`、`psaux` 等。少了 `console` 的症状是
+   `Warning: unable to open an initial console` 紧接着 `No init found`。
+
+### 13.4 实测（`-cpu pentium2 -m 64`）
+
+```
+PIIX3: IDE controller on PCI bus 00 dev 09
+hda: hda1 hda2 hda3
+VFS: Mounted root (ext2 filesystem).
+→ BasicLinux 3.5 LCARS 欢迎屏 → 串口 shell → startx → Xvesa + JWM
+free:  Mem 63460 / Swap 262136（首次开机自动 mkswap）
+```
+
+串口上能 `echo`/`free`/`startx`；X 起来后 JWM 的任务栏（linux 企鹅按钮 + 时钟）
+正常显示。截图见提交说明。
+
+### 13.5 这条线的能力边界（2.2.26 的真相）
+
+| 硬件 | 支持情况 |
+|---|---|
+| 440BX / PIIX4 IDE、CF 卡 | ✅ `CONFIG_BLK_DEV_IDEPCI`；**无 IDE DMA**（config 里 `BLK_DEV_IDEDMA` 关着），纯 PIO——CF 卡够用 |
+| PS/2 键盘、触控点/鼠标 | ✅（`Detected PS/2 Mouse Port`） |
+| USB 1.1（UHCI/OHCI、存储、HID） | ✅ 模块（`/lib/modules/2.2.26/usb/usb-storage.o`、`usb-uhci.o`），要用 `modprobe` |
+| 16 位 PCMCIA 卡（3c589/3c574/airo/orinoco 系/串并口） | ✅ 老 Card Services + `i82365.o` 那套模块；`/etc/pcmcia/start` |
+| CardBus（yenta，TI PCI1250） | ❌ 2.2 没有 yenta |
+| APM（电池/挂起/温度） | ❌ `CONFIG_APM` 没开 |
+| IrDA | ❌ |
+| 串口内核日志 | ❌ 这份内核没编 `CONFIG_SERIAL_CONSOLE`（启动信息里 "Serial driver version 4.27 **with no serial options enabled**"）。串口只能拿到 getty 登录 shell；要内核日志得重编 2.2 内核 |
+| 显卡 | 文本模式 VGA；X 用 **Xvesa**（走 VBE BIOS，不需要 tridentfb/Xorg），`Xvesa -listmodes` 看模式，`startx -mode 0x0117` 之类可指定 1024x768x16 |
+
+### 13.6 和主镜像比，选谁
+
+| | Constellation 770ED（6.6.162） | BasicLinux LCARS（2.2.26） |
+|---|---|---|
+| 内存 | 64 MiB 起（实测桌面后剩 40 MiB） | 8 MiB 即可 |
+| 显卡 | `tridentfb` + Xorg fbdev，1024x768 | Xvesa（VBE），模式靠 BIOS |
+| 软件 | 自编 i486 最小集 + JWM + st | 满盘 Slackware 4.0 包（AbiWord/Gimp/Perl/Java…） |
+| 现代硬件 | CardBus、USB2、APM、PCMCIA 全套 | 16 位 PCMCIA + USB1.1 |
+| 适合 | 日常用这台 770ED | 体验 1999 年那套软件、极端低配演示 |
+
