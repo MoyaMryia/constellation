@@ -64,9 +64,16 @@ sudo ./scripts/deploy.sh build/constellation.img -f
 JOBS=16 scripts/build-core-770ed.sh                 # 默认 Linux 6.6.162 LTS
 KVER=6.18.44 JOBS=16 scripts/build-core-770ed.sh    # 可选：6.18.44（无 16 位无线）
 
-ROOT_PASSWORD_HASH="$(openssl passwd -6 '密码')" scripts/build-rootfs-770ed.sh
-scripts/mkimage-770ed.sh                            # build/constellation-770ed.img
-DISK_SIZE=8G scripts/mkimage-770ed.sh               # 做满 8.1 GB 盘
+H=$(openssl passwd -6 '密码')
+ROOT_PASSWORD_HASH="$H" EXTRA_USERS="moyamryia:$H" scripts/build-rootfs-770ed.sh
+scripts/mkimage-770ed.sh                            # 3800 MiB（4 GB CF 卡）
+DISK_SIZE=7800M scripts/mkimage-770ed.sh            # 8.1 GB 硬盘
+SWAP_MIB=0 scripts/mkimage-770ed.sh                 # 不要 swap 分区
+GRUB4DOS=1 scripts/mkimage-770ed.sh                 # 用 grub4dos 引导
+scripts/build-grub4dos.sh                           # 先编 grub4dos（源码构建）
+
+sudo scripts/install-disk-770ed.sh /dev/sdX             # 写盘（含扩容/安全检查）
+sudo scripts/install-disk-770ed.sh /dev/sdX --grub4dos  # 写盘并换 grub4dos
 ```
 
 改内核配置后先重算完整配置（逐项核验 fragment 真的生效）：

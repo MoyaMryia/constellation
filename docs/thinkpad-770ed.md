@@ -151,7 +151,57 @@ p2            ext4   LABEL=root：rootfs（/sbin/init → s6-svscan）
   /`grubinst` 把 grub4dos 装到 MBR 或分区引导扇区后即可引导，不必重做
   镜像，也不需要再改任何参数。
 
-### 5.2 写到真机硬盘
+### 5.2 介质尺寸与 swap 分区
+
+镜像默认按 **3800 MiB** 做（4 GB 的 CF 卡厂标是十进制，实际 ~3.98e9 B；
+按 4 GiB 做会差一点点写不下）。布局：
+
+```
+p1  2048起   32 MiB   FAT16  bootable（bzImage / grub.cfg / menu.lst / [grldr]）
+p2           256 MiB  swap（type 82，首次启动由 init 做 mkswap 并启用）
+p3           剩余     ext4 root（根放最后，扩容只动它）
+```
+
+`SWAP_MIB=0` 可关掉 swap（此时根分区回到 p2）。想给 8.1 GB 硬盘做满：
+`DISK_SIZE=7800M scripts/mkimage-770ed.sh`。
+
+swap 是**按命令行启用**的：mkimage 会往内核命令行写 `cswap=/dev/sda2`，
+init 只认这个参数（不猜设备，避免把根分区 mkswap 掉）。zram(16 MiB) 仍然
+保留，两者叠加。
+
+### 5.3 写盘（CF 卡 / 2.5" 硬盘）
+
+```sh
+sudo scripts/install-disk-770ed.sh /dev/sdX              # GRUB2（镜像自带）
+sudo scripts/install-disk-770ed.sh /dev/sdX --grub4dos   # 换成 grub4dos 引导
+```
+
+脚本会：拒绝分区/根设备/已挂载/swap/被 dm 占用的目标；打印型号容量；要求
+手打设备路径确认；目标比镜像大时把 p3 扩到介质末尾并 `resize2fs`；
+`--grub4dos` 时把 `grldr.mbr` 写进 MBR、`grldr` 放进 p1 根目录。
+
+grub4dos 的二进制由源码构建（GitHub Release 只有 UEFI 版）：
+
+```sh
+scripts/build-grub4dos.sh      # 钉 commit cd65de1，产出 build/grub4dos/{grldr,grldr.mbr,bootlace.com}
+GRUB4DOS=1 scripts/mkimage-770ed.sh   # 直接做一份 grub4dos 引导的镜像
+```
+
+引导分区里已经预置了 grub4dos 用的 `menu.lst`（内核与参数和 GRUB2 完全
+一致），所以两种引导器可以互换而不改系统。
+
+### 5.4 账号
+
+镜像里的账号在构建时决定，明文口令不落仓库：
+
+```sh
+H=$(openssl passwd -6 '你的密码')
+ROOT_PASSWORD_HASH="$H" EXTRA_USERS="moyamryia:$H" scripts/build-rootfs-770ed.sh
+```
+
+`EXTRA_USERS` 支持多个（空格分隔），每个都建 `/home/<name>`、uid 从 1000 起。
+
+### 5.5 写到真机硬盘
 
 镜像按"整盘"布局，直接整盘写：
 
@@ -332,3 +382,21 @@ QEMU 没有 440BX+TI1250+Cyber9397DVD+CS4237B 的精确模型，所以下面这�
 | `rootfs-770ed/usr/bin/x` | 启动 X（有 `/dev/fb0` 用 fbdev，否则 vesa）+ JWM，VT2 |
 | `rootfs-770ed/etc/ppp/` | 串口猫/PCMCIA 猫/USB 3G 猫的 pppd 模板 |
 | `rootfs-770ed/etc/modprobe.d/*.conf` | tridentfb 面板参数、CS4237B 探测、MWave 资源示例 |
+
+## 10. 还没做好的（诚实清单）
+
+| 项目 | 状态 | 说明 |
+|---|---|---|
+| **EC / SMAPI**（风扇、温度、Fn 组合键、软件切电视输出） | ❌ 未做 | 唯一通路是 tpctl 的 `thinkpad` 模块（SMAPI，2.6.17 后编不过），此机无 ACPI 用不了 `tp_smapi`。需要真机做实验台才能反推接口，风险是写坏 EC 状态。 |
+| MWave 猫的**用户态拨号栈** | ❌ 缺 | 内核 `mwave` 在，缺 IBM 当年的 `mwavem` 守护进程；只能到"设备可打开"。 |
+| `b43`/`atmel_cs`/`p54pci`/`spectrum_cs` 的固件 | ⚠️ 缺 | 上游 linux-firmware 已删除这些老固件；需要 `b43-fwcutter` 从 Broadcom 驱动里切，或自备。ath5k/rtl8180/orinoco 不需要（orinoco 的已带）。 |
+| IrDA 1.1（4 Mbps） | ❌ 放弃 | 上游 4.14 移除整套 IrDA，要留得回到 4.13。 |
+| DEVA（MPEG-2 硬解、视频输入/输出） | ❌ 无解 | 从来没有 Linux 驱动。 |
+| ALSA 细调（按通道混音、alsamixer） | ⚠️ 只有主音量 | 镜像里是 `/bin/mixer`（OSS 模拟）；alsa-utils 需要 alsa-lib，与"BusyBox + s6"的取舍冲突，暂缓。 |
+| 电源管理用户态（apmd、休眠分区 tphdisk） | ⚠️ 只有 `/proc/apm` | 挂起/休眠靠 Fn 键（BIOS 干）；没有事件守护进程，也没有休眠分区制作工具。 |
+| X 的键盘布局切换 | ⚠️ 未验 | 现在用 `kbd` 驱动 + 自编 `xkbcomp`，理论上 `setxkbmap` 可用，但没在真机/多布局上验过。 |
+| 扩展坞（SelectaBase / SelectaDock） | ⚠️ 未测 | 端口复制不需要专用驱动，但没实测。 |
+| i486 线的 apk 包管理 | ❌ 未建 | amd64 线有 apk 3.0.7 + 自建仓库；770ED 线目前靠 `alpine-x86-770ed.py` 直接取包，不是正式的 apk 仓库。 |
+| 安装器 UI | ❌ 无 | 现在就是 dd 镜像 + `install-disk-770ed.sh`。 |
+| 真机验收 | ⏳ 待做 | tridentfb 面板参数、CS4237B PnP 探测、CardBus 插卡、APM、USB 都只在 QEMU 近似模型下验过。 |
+

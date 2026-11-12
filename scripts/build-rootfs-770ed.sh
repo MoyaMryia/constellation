@@ -15,6 +15,11 @@ S6_ROOT=${M2_INSTALL_DIR:-$ROOT/build/m2root}
 MODROOT=${MODROOT:-$ROOT/build/modroot-770ed}
 TMPL=$ROOT/rootfs-770ed
 PASSWORD=${ROOT_PASSWORD_HASH:-!}
+# 额外账号：EXTRA_USERS="name:$6$hash name2:$6$hash2"（空格分隔）。
+# 明文口令不要写进仓库；构建时用
+#   EXTRA_USERS="moyamryia:$(openssl passwd -6 '…')"
+# 传进来即可。
+EXTRA_USERS=${EXTRA_USERS:-}
 
 [ -x "$BB_BIN" ] || { echo "build BusyBox first: scripts/build-core-770ed.sh" >&2; exit 1; }
 [ -x "$S6_ROOT/usr/bin/s6-svscan" ] || { echo "build s6 first: scripts/build-s6.sh" >&2; exit 1; }
@@ -143,6 +148,20 @@ chmod 0755 "$DEST/sbin/init" "$DEST/sbin/hotplug" "$DEST/usr/sbin/hwcheck" \
 printf 'root:x:0:0:root:/root:/bin/sh\n' > "$DEST/etc/passwd"
 printf 'root:x:0:\n' > "$DEST/etc/group"
 printf 'root:%s:19000:0:99999:7:::\n' "$PASSWORD" > "$DEST/etc/shadow"
+
+# 普通账号（可选）：每个都建 /home/<name>，uid 从 1000 起
+uid=1000
+for entry in $EXTRA_USERS; do
+  name=${entry%%:*}
+  hash=${entry#*:}
+  case "$name" in ''|*[!a-z0-9_-]*) echo "跳过非法用户名：$name" >&2; continue ;; esac
+  mkdir -p "$DEST/home/$name"
+  chmod 0700 "$DEST/home/$name"
+  printf '%s:x:%s:%s:%s:/home/%s:/bin/sh\n' "$name" "$uid" "$uid" "$name" "$name" >> "$DEST/etc/passwd"
+  printf '%s:x:%s:\n' "$name" "$uid" >> "$DEST/etc/group"
+  printf '%s:%s:19000:0:99999:7:::\n' "$name" "$hash" >> "$DEST/etc/shadow"
+  uid=$((uid + 1))
+done
 chmod 0644 "$DEST/etc/passwd" "$DEST/etc/group" "$DEST/etc/securetty" "$DEST/etc/mdev.conf"
 chmod 0600 "$DEST/etc/shadow"
 printf 'constellation\n' > "$DEST/etc/hostname"
@@ -153,6 +172,9 @@ printf '/dev/sda2 / ext4 rw,relatime 0 1\nproc /proc proc defaults 0 0\nsysfs /s
 echo "770ED rootfs written: $DEST"
 echo "  modules: $(find "$DEST/lib/modules" -name '*.ko' | wc -l) 个"
 echo "  size   : $(du -sh "$DEST" | cut -f1)"
+if [ -n "$EXTRA_USERS" ]; then
+  echo "extra accounts: $(echo "$EXTRA_USERS" | sed 's/:.*//g')"
+fi
 if [ "$PASSWORD" = '!' ]; then
   echo "root login is locked; set ROOT_PASSWORD_HASH=\$(openssl passwd -6 'pw') when building to enable login"
 fi

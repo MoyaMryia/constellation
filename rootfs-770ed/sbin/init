@@ -66,6 +66,23 @@ for mf in /sys/bus/pci/devices/*/modalias /sys/bus/usb/devices/*/modalias \
   /sbin/modprobe -q "$(cat "$mf")" 2>/dev/null || true
 done
 
+# 真实 swap 分区（mkimage 在命令行里给 cswap=/dev/sdaX）。只按命令行来，
+# 绝不猜设备：布局是 p2=swap/p3=root 还是 p2=root，猜错一次就把根分区
+# mkswap 了。第一次启动时分区里还没有 swap 签名，mkswap 后启用。
+SWAPDEV=
+for arg in $(cat /proc/cmdline); do
+  case "$arg" in cswap=*) SWAPDEV=${arg#cswap=} ;; esac
+done
+if [ -n "$SWAPDEV" ] && [ -b "$SWAPDEV" ]; then
+  if swapon "$SWAPDEV" 2>/dev/null; then
+    echo "constellation: swap on $SWAPDEV"
+  elif mkswap "$SWAPDEV" >/dev/null 2>&1 && swapon "$SWAPDEV" 2>/dev/null; then
+    echo "constellation: swap formatted and enabled on $SWAPDEV"
+  else
+    echo "constellation: $SWAPDEV swap enable failed"
+  fi
+fi
+
 # zram swap：64 MiB 机型上这是唯一能低成本换来的额外可用内存。
 if [ -e /sys/block/zram0/disksize ]; then
   ZRAM_SIZE=${ZRAM_SIZE:-16777216}
