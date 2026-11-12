@@ -319,6 +319,40 @@ H: Handlers=mouse0 event1
 两条路都验证过；`ps2EnableDataReporting` 成功就说明确实在跟 AUX 口上的
 PS/2 设备对话，而不是空设备。
 
+## 6.3 1998 年那份 XF86Config 能给现在什么
+
+一份 1998 年 comp.os.linux.x 上的 770 配置（Ethan Henry，XFree86 3.3.2 +
+XSuSE Trident server）确实有用——**但只有"面板参数"和"老坑"是可继承的**，
+服务器/驱动那套已经作废。
+
+**采纳了的部分**
+
+| 1998 年的写法 | 现在怎么用 |
+|---|---|
+| `HorizSync 31.5 - 57.0` / `VertRefresh 50-100` | 直接抄进 `/usr/bin/x` 生成的 Monitor 段（原来是拍脑袋写的 30-70/50-75）。这样 X 会按面板真实能力剔除时序。 |
+| `Modeline "1024x768" 65 … 768 771 777 806 -hsync -vsync` | 与我们现在用的 60 Hz 时序一致（65.00 1024 1048 1184 1344 …），保留。 |
+| `Depth 24/32` 只给到 800×600 | 一致：4 MB SGRAM 下 1024×768 用 16bpp，24/32bpp 只到 800×600。已写进 Screen 段的 fallback。 |
+| `Section "Pointer"` `Protocol "PS/2"` `Device "/dev/mouse"` | 佐证 PS/2 + `/dev/psaux`（`/dev/mouse` 当年就是它的软链）。我们现在默认 `/dev/input/mice`，并**加回了 `/dev/mouse → /dev/psaux` 的兼容软链**（mdev.conf 规则）。 |
+| `XkbKeymap "xfree86(us)"` | 现代等价物是 `kbd` 驱动 + 自编 `xkbcomp` + `xkeyboard-config`，已就位。 |
+
+**作废的部分（不要照抄）**
+
+- `Driver "svga"` / `Driver "accel"` / "Trident Cyber 9397 (generic)" 的
+  Device 段：那是 XFree86 3.3 的 svga/accel 服务器架构，Xorg 21 里没有。
+  我们的路径是 `tridentfb`（内核帧缓冲）+ X 的 `fbdev` 驱动。
+- `FontPath "/usr/X11R6/lib/X11/fonts/…"`、`RgbPath`：路径与机制都变了。
+- `Screen` 段里并排写 svga/vga16/vga2/accel 四套：Xorg 只认一套。
+
+**两条"老坑"的现状**
+
+1. *"startx 之后要晃一下鼠标屏幕才出来"* —— 那是当时 Trident 服务器先设模式、
+   再等第一次绘制。我们现在是 **tridentfb 在 modprobe 时就把模式设好**，
+   X 只是在已有帧缓冲上画，所以**没有这个现象**。
+2. *"合盖/挂起会把屏幕搞花，想挂起先切到文本 VT"* —— 这条仍然成立（VGA
+   状态由 BIOS 的挂起/恢复流程切走，X 的帧缓冲内容不会自动恢复）。真机上
+   建议：挂起前 `chvt 1`（或 Fn 键切文本），恢复后再 `chvt 2`。没有 EC 驱动
+   之前没法自动化这一步。
+
 ## 7. 验收
 
 ### 7.1 已经实测的（QEMU，i440FX + PIIX3 + PII，64 MiB，真实引导链非 `-kernel`）

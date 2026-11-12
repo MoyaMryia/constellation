@@ -11,6 +11,9 @@
 # devtmpfs 已经给出静态节点；mdev 补的是冷插拔（启动时已插入的 CardBus
 # 卡）与后续 mdev -s 的 /dev 补齐。
 CONFIG_MDEV=y
+# CONF 才是"读 /etc/mdev.conf 规则"；RENAME 只是允许重命名/建软链动作。
+# 少了 CONF，mdev 会无视 mdev.conf（症状：/dev/mouse 这类兼容软链不出现）。
+CONFIG_FEATURE_MDEV_CONF=y
 CONFIG_FEATURE_MDEV_RENAME=y
 
 # --- 硬件勘察：本机全部验收都靠这几条命令 ---
