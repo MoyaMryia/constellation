@@ -25,6 +25,11 @@ grep -q '^proc /proc proc' /proc/mounts || exec sh
 grep -q '^sysfs /sys sysfs' /proc/mounts || exec sh
 
 mount -o remount,rw / || exec sh
+
+# /tmp 用 tmpfs：镜像上的 /tmp 若不隔离，Xorg 的 /tmp/.X0-lock、编译中间物
+# 之类会跨次开机残留（典型症状：第二次启动 X 时报
+# "Server is already active for display 0"）。顺便也少写盘。
+mountpoint -q /tmp || mount -t tmpfs -o size=16M,mode=1777 tmpfs /tmp || true
 hostname "$(cat /etc/hostname)"
 
 # 热插拔：CardBus 插卡后内核发 uevent，本脚本按 MODALIAS 交给 modprobe。
@@ -42,7 +47,8 @@ fi
 #   floppy     — APM 休眠需要它，哪怕没插软驱
 #   zram       — 6.6 风的 zram 是模块（6.18 风是内置，modprobe 会静默失败）
 #   snd-mixer-oss — 提供 /dev/mixer，配 /bin/mixer 调音量
-for m in tridentfb snd-cs4236 snd-mixer-oss floppy zram; do
+#   ppp_generic — 创建 /dev/ppp（Modem 拨号的字符设备，无 bus modalias）
+for m in tridentfb snd-cs4236 snd-mixer-oss floppy zram ppp_generic; do
   /sbin/modprobe -q "$m" 2>/dev/null || true
 done
 

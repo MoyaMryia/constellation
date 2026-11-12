@@ -1,0 +1,14 @@
+#!/bin/sh
+# xinit 的会话脚本：窗口管理器 + 一个终端。
+#
+# 选择顺序：ours(JWM/musl i486) → twm（Alpine 的，已验证能在 PII 上跑）。
+# 不用 icewm/jwm(Alpine 包)：它们是 Pentium III(SSE) 基线，PII 上 SIGILL。
+xrdb -merge /etc/X11/Xresources 2>/dev/null || true
+
+if [ -x /usr/bin/jwm ]; then
+  /usr/bin/jwm -c /etc/jwm/jwmrc &
+elif [ -x /usr/bin/twm ]; then
+  /usr/bin/twm &
+fi
+
+exec /usr/bin/xterm -fa "DejaVu Sans Mono" -fs 11 -bg black -fg white

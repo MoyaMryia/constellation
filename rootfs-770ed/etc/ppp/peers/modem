@@ -1,0 +1,16 @@
+# 拨号模板：PCMCIA 串口猫 / MWave 的 UART 通路 / 外接串口猫
+#
+# 用法：  pppd call modem          （在 /etc/ppp/peers/modem 里填账号后）
+# 账号：  /etc/ppp/chap-secrets 或 /etc/ppp/pap-secrets 里加一行：
+#           "你的账号" * "你的密码"
+#
+# 设备与速率按实际改：770ED 的 PCMCIA 串口猫通常是 /dev/ttyS1（serial_cs），
+# MWave 的 UART 通路出厂配置一般是 0x2f8 → /dev/ttyS1 或 /dev/ttyS0。
+/dev/ttyS1 115200
+connect "/usr/sbin/chat -v -f /etc/ppp/chat-dial"
+noauth
+defaultroute
+# user "你的账号"
+# persist
+# 老猫对 LCP 回显很敏感，必要时打开：
+# noaccomp nobsdcomp nodeflate

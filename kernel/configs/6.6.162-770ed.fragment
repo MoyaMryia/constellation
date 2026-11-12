@@ -72,9 +72,6 @@ CONFIG_UDF_FS=m
 # Trident Cyber9397DVD：内核侧只有 tridentfb。做成模块，好让
 # /etc/modprobe.d/tridentfb.conf 里的面板参数（fp/1024x768-16）生效，
 # 并且不和早期 VGA 文本控制台抢设备。
-# vesafb 必须关：它和 tridentfb 会同时绑同一块显示芯片，控制台会停在
-# vesafb 上，tridentfb 只为 /dev/fb1 服务。GRUB 菜单保持文本模式即可。
-CONFIG_FB_VESA=n
 CONFIG_FB_TRIDENT=m
 CONFIG_FRAMEBUFFER_CONSOLE=y
 CONFIG_FRAMEBUFFER_CONSOLE_DETECT_PRIMARY=y
@@ -260,3 +257,28 @@ CONFIG_FW_LOADER=y
 CONFIG_ZRAM=m
 CONFIG_CRYPTO_LZO=m
 CONFIG_CRYPTO_LZ4=m
+
+# ---------------------------------------------------------------- USB 大容量存储
+# usb-storage 覆盖 U 盘/读卡器/移动硬盘；UAS 是 USB 3.0 之后的新协议，
+# CardBus USB 卡接 SSD 硬盘盒时会用到。
+CONFIG_USB_STORAGE=m
+CONFIG_USB_UAS=m
+
+# ---------------------------------------------------------------- PPP / 拨号
+# PCMCIA 串口猫、MWave 猫（/dev/ttyS* 通路）与 USB 3G 猫都靠 pppd；
+# 内核侧只需要 ppp 字符设备与其压缩子模块。
+CONFIG_PPP=m
+CONFIG_PPP_ASYNC=m
+CONFIG_PPP_SYNC_TTY=m
+CONFIG_PPP_DEFLATE=m
+CONFIG_PPP_BSDCOMP=m
+CONFIG_PPPOE=m
+CONFIG_PPP_MPPE=m
+CONFIG_USB_SERIAL_OPTION=m
+
+# ---------------------------------------------------------------- 帧缓冲回退
+# vesafb 是 bool，只能编入。它只在**引导器真的设过 VBE 模式**时才绑卡
+# （读 screen_info），而我们的 GRUB 菜单默认 gfxpayload=text，所以真机上
+# 它不会出现、不会和 tridentfb 抢显卡；把 gfxpayload 改成 1024x768x16
+# 时它才会接管（QEMU 里的验收就是走这条路）。
+CONFIG_FB_VESA=y

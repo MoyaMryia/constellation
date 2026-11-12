@@ -1,0 +1,3 @@
+! IceWM 之外的 X 客户端默认字体（Xft）
+XTerm*faceName: DejaVu Sans Mono
+XTerm*faceSize: 11

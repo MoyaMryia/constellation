@@ -34,7 +34,7 @@ IBM PSREF 770ED 概述（LWIK-3TQHC7）。
 | 南桥 | Intel PIIX4 系列（IDE/USB/APM） | `ATA_PIIX`、`USB_UHCI_HCD`、`APM` | ✅ 内置 |
 | 内存 | 32 MiB 板载 + 64-pin SO-DIMM；288 MiB 可寻址 | `HIGHMEM=n` 足够 | ✅ |
 | 显示 | Trident **Cyber9397DVD**，4 MB SGRAM，PCI `1023:9397` | **`tridentfb`**（模块） | ✅ 面板 1024×768-16 |
-| 显卡 X11 | 同上 | Xorg `trident` 驱动（不在镜像内） | ⚠️ 需自行装 X |
+| 显卡 X11 | 同上 | Xorg（Alpine x86 21.1.14）+ `fbdev`（帧缓冲）/`vesa`（VBE） | ⚠️ 见 §6.1：Alpine 的 X 服务器在 PII 上会 SIGILL |
 | 音频 | Crystal **CS4237B**（ISA，SB Pro 兼容） | **`snd-cs4236`** + `PNPBIOS`/`ISAPNP`；`snd-mixer-oss` 提供 `/dev/mixer` | ✅ 驱动 + `/bin/mixer` 调主音量（见 §6 的说明） |
 | 猫 | IBM **MWave 3780i** DSP（56K，x2） | **`mwave`**（模块） | ⚠️ 需 BIOS 已分配 DSP 资源；无拨号用户态 |
 | CardBus | **TI PCI1250**（`104c:ac16`），2×Type II / 1×Type III | **`yenta_socket`**（内置） | ✅ 通用 CardBus 桥，按 PCI class 匹配 |
@@ -65,10 +65,20 @@ IBM PSREF 770ED 概述（LWIK-3TQHC7）。
 | CardBus 无线（802.11a/b/g） | `ath5k`、`b43`/`b43legacy`、`p54pci`、`rtl8180` |
 | **16 位无线（802.11b）** | `orinoco_cs`、`spectrum_cs`、`hostap_cs`、`atmel_cs`、`airo_cs`、`ray_cs`、`libertas_cs` |
 
-> 16 位无线这一组**只有 6.6 及更早的内核才有**（见 §3）。`b43`/`atmel_cs`/
-> `spectrum_cs`/`p54pci` 需要 `/lib/firmware` 里的固件，镜像**不带**固件；
-> 缺固件时 dmesg 会直接点名要哪个文件，放进 `/lib/firmware` 即可，
-> 无需重编内核。
+> 16 位无线这一组**只有 6.6 及更早的内核才有**（见 §3）。
+
+固件（`/lib/firmware`）随镜像带的是**能合法取到的那一部分**：
+
+| 文件 | 提供者 | 服务的卡 |
+|---|---|---|
+| `regulatory.db`、`regulatory.db.p7s` | wireless-regdb 2024.05.08 | cfg80211 监管域（ath5k/rtl8180 等） |
+| `agere_sta_fw.bin`、`agere_ap_fw.bin` | linux-firmware | orinoco_cs（Agere/Hermes-II 卡） |
+
+**不需要固件的卡**：ath5k、rtl8180、pcnet_cs、3c589/3c574、8139too 等——
+插上就能用。**缺固件的卡**：`b43`（Broadcom 43xx）、`atmel_cs`、
+`spectrum_cs`、`p54pci`——这几种的固件已被上游 linux-firmware 移除/需要
+用户自己用 `b43-fwcutter` 从 Broadcom 驱动里切，故不带；dmesg 会点名要
+哪个文件，放进 `/lib/firmware` 即可，不必重编内核。
 
 ## 3. 为什么 770ED 用 6.6 LTS 而不是工程的 6.18 线
 
@@ -164,11 +174,37 @@ sudo dd if=build/constellation-770ed.img of=/dev/sdX bs=4M conv=fsync status=pro
 | **IrDA 1.1**（4 Mbps FIR） | ❌ 不支持 | 上游 IrDA 栈在 **4.14** 被整体移除（`nsc-ircc` 在 4.13 还在）。要留它得回到 4.13，等于放弃整个现代用户空间。 |
 | **DEVA**（MPEG-2 硬解、视频输入/输出） | ❌ 不支持 | 从来没有 Linux 驱动。DVD 数据读取本身没问题（`sr_mod`+`udf`），缺的是硬解与模拟视频口。 |
 | **MWave 3780i 猫** | ⚠️ 驱动在，拨号栈不在 | `mwave` 驱动仍在树内（`drivers/char/mwave`），但：①DSP 资源必须由 BIOS 侧 ThinkPad 配置工具分配过并写进 CMOS；②用户态 `mwavem`+`pppd` 不在镜像里。资源参数示例见 `/etc/modprobe.d/mwave.conf`。 |
+| 图形桌面（X11） | ❌ PII 上跑不起来 | 见 §6.1：Alpine 的 x86 二进制是 Pentium III（SSE）基线，Xorg 服务器启动即 `Illegal instruction`；我们自己编的 JWM 与 Alpine 的 twm 是好的，缺的是 **i486 基线的 X 服务器**。 |
 | 声音输出 | ⚠️ 有驱动、有音量控制，没有混音界面 | `snd-cs4236` 注册 `/proc/asound/cards` 与 `/dev/snd/*`；ALSA 模拟出的 `/dev/mixer` 配 `tools/mixer.c`（`/bin/mixer`，静态 30 KB）调主音量（`mixer 80`、`mixer mute`）。缺的是 alsa-utils 那套按通道（Mic/PCM/3D）细调的界面——那需要 alsa-lib，与"整个用户空间 = BusyBox + s6"的取舍冲突。 |
 | 风扇/热键/特殊键 | ⚠️ 无 | 此机无 ACPI，`thinkpad_acpi` 用不上；EC（嵌入式控制器）访问要靠 2000 年代那个 out-of-tree 的 `tpctl`/`thinkpad` 模块，不在主线。风扇由 EC 自行控制，Linux 侧不影响安全。 |
 | 休眠（Fn+F12） | ⚠️ 依赖 BIOS | 需要先做休眠分区（`tphdisk`/IBM 工具）并 `fdisk` 把分区类型设为 `a0`。这是 BIOS 行为，与内核无关；镜像不含 `tphdisk`。 |
 | 挂起/电池状态 | ✅ `/proc/apm` | 读 `/proc/apm` 即可看电池与交流状态（`hwcheck` 会打印）。挂起动作本身由 Fn+F4 或 BIOS 触发。 |
 | 无线固件 | ⚠️ 不含 | `b43`/`atmel`/`spectrum`/`p54` 需要 `/lib/firmware` 中的固件；镜像不带（许可证与体积原因）。dmesg 会点名要哪个文件。 |
+
+## 6.1 图形桌面：能到哪一步、卡在哪
+
+| 组件 | 状态 | 证据 |
+|---|---|---|
+| 帧缓冲 | ✅ | tridentfb（真机）/ vesafb（QEMU，`gfxpayload=1024x768x16`）→ `/proc/fb` |
+| 窗口管理器 | ✅ **自己编的 JWM 2.4.6** | `scripts/build-jwm-770ed.sh`，musl i486，`objdump` 里 SSE 指令计数 **0** |
+| 兜底 WM | ✅ Alpine `twm` | 纯 C，PII 上可跑 |
+| X 客户端 | ✅ | `xterm`、`setxkbmap`、`xauth`、`xrandr` 在 PII 上正常 |
+| X 服务器 | ❌ | `Xorg` 在 PII 上启动即 `Illegal instruction`（`-version` 正常，说明二进制本身能加载） |
+| IceWM / JWM(Alpine) / FVWM / Openbox / WindowMaker | ❌ | 全部在 `libgcc_s.so.1` / `libWUtil.so` 里 `trap invalid opcode` |
+
+根因：**Alpine 的 x86 归档基线是 Pentium III（SSE）**。实测 `libgcc_s.so.1`
+里有 1325 条 SSE 指令且 `.note.gnu.property` 写明 `x86 feature used: … XMM`；
+`libcrypto.so.3`（`pppd` 因此崩）、`libWUtil`、`libgcc_s`（IceWM/JWM/FVWM/
+Openbox）都在其列。Pentium II 没有 SSE，于是 SIGILL。
+
+可选出路（按代价排序）：
+
+1. **从源码编一个 i486 基线的 X 服务器**（xf86-video-fbdev + 最小扩展无
+   GLX/DRI）。这是"把图形补齐"的正经做法，但 xorg-server 有 20+ 个依赖
+   （xcb/pixman/xfont2/xkeyboard-config…），属于独立的工程阶段。
+2. 换一台 **Pentium III 及以后**的机器（如 770X/770Z 也是 PII，不行；T2x 可以），
+   那样现在的 Alpine X 栈可以直接用。
+3. 只做**纯帧缓冲的字符界面**（本镜像现状）：控制台 + framebuffer，无 X。
 
 ## 7. 验收
 
@@ -228,4 +264,8 @@ QEMU 没有 440BX+TI1250+Cyber9397DVD+CS4237B 的精确模型，所以下面这�
 | `rootfs-770ed/usr/sbin/hwcheck` | 上机自检报告（§7.2 的那个） |
 | `tools/mixer.c` | OSS 混音器客户端（`/bin/mixer`），补 alsa-utils 的缺口 |
 | `scripts/smoke-770ed.sh` | 镜像冒烟验收（真实引导链 + 登录 + 检查脚本） |
+| `scripts/alpine-x86-770ed.py` | 从 Alpine x86 仓库取二进制包（钉索引/包哈希，跳过会覆盖核心用户空间的包） |
+| `scripts/build-jwm-770ed.sh` | 用本工程工具链编 JWM（`/bin/jwm`），保证 PII 上无 SSE |
+| `rootfs-770ed/usr/bin/x` | 启动 X（有 `/dev/fb0` 用 fbdev，否则 vesa）+ JWM，VT2 |
+| `rootfs-770ed/etc/ppp/` | 串口猫/PCMCIA 猫/USB 3G 猫的 pppd 模板 |
 | `rootfs-770ed/etc/modprobe.d/*.conf` | tridentfb 面板参数、CS4237B 探测、MWave 资源示例 |

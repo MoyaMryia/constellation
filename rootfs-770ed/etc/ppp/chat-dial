@@ -1,0 +1,8 @@
+# chat 脚本（模拟 AT 指令序列）。注意：chat 用 \d 表示"等 1 秒"。
+ABORT "NO CARRIER"
+ABORT "NO DIALTONE"
+ABORT "BUSY"
+"" ATZ
+OK ATE0
+OK ATDT\T
+CONNECT \d\c

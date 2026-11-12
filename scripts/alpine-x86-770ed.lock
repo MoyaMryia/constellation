@@ -1,0 +1,189 @@
+# Alpine v3.20 x86 取包记录（index sha256 / 包版本+sha256）
+# 由 scripts/alpine-x86-770ed.py 维护；index 行用作下次运行的校验
+index:v3.20/community/x86 3e18fd837a6e534ba11d622beff866b015ce691ee2dfac29cf4a1f243e825f5e
+index:v3.20/main/x86 d974feac7bfae122fb2720690ff08dd18f0aab78442f1019e572d6192b359446
+pkg:alsa-lib 1.2.11-r0
+pkg:brotli 1.1.0-r2
+pkg:brotli-dev 1.1.0-r2
+pkg:brotli-libs 1.1.0-r2 fa0420e207546b59b067f6c3b89272c62fb8bcea585322497e55212e1c8a575b
+pkg:bspwm 0.9.10-r4
+pkg:cairo 1.18.4-r0
+pkg:cairo-gobject 1.18.4-r0
+pkg:dmenu 5.3-r0
+pkg:dwm 6.5-r0
+pkg:encodings 1.0.7-r1
+pkg:eudev-libs 3.2.14-r2
+pkg:expat 2.8.1-r0
+pkg:expat-dev 2.8.1-r0
+pkg:font-alias 1.0.5-r0
+pkg:font-cursor-misc 1.0.4-r1
+pkg:font-dejavu 2.37-r5
+pkg:font-liberation 2.1.5-r2
+pkg:font-misc-misc 1.1.3-r1
+pkg:fontconfig 2.15.0-r1 4061f177af7e056e903a3dc43c020949d48ce55e601ba61dbb036cf86f2a052b
+pkg:fontconfig-dev 2.15.0-r1
+pkg:freetype 2.13.2-r0 a8160b6ad1adab41cdc9768d8312873156444e39cd15b33bfaa464930b001596
+pkg:freetype-dev 2.13.2-r0
+pkg:fribidi 1.0.15-r0
+pkg:fvwm 2.7.0-r2
+pkg:gdbm 1.23-r1
+pkg:gdk-pixbuf 2.42.12-r0
+pkg:giflib 5.2.2-r0
+pkg:glib 2.80.5-r0
+pkg:gmp 6.3.0-r1
+pkg:graphite2 1.3.14-r6
+pkg:harfbuzz 8.5.0-r0
+pkg:hwdata-pci 0.382-r0
+pkg:icewm 3.5.0-r0
+pkg:imlib2 1.12.2-r0
+pkg:jwm 2.4.3-r0
+pkg:libao 1.2.2-r2
+pkg:libblkid 2.40.1-r1
+pkg:libbsd 0.12.2-r0 61a27bd0c5839597625abe8191517459191f752bd83fd3756bbfa6adbb2b450d
+pkg:libbz2 1.0.8-r6 e55b6543a1d5e453d8c4cd084cab14072ccd3cd7aa707279cfb8d99c4aa4407d
+pkg:libcrypto3 3.3.7-r0
+pkg:libdrm 2.4.120-r0
+pkg:libeconf 0.6.3-r0
+pkg:libepoxy 1.5.10-r1
+pkg:libevdev 1.13.1-r0
+pkg:libexpat 2.8.1-r0 e6d1002ee188df388db5cc81bb3083933f83a487cbe76df229016a6d680e80e4
+pkg:libfdisk 2.40.1-r1
+pkg:libffi 3.4.6-r0
+pkg:libflac 1.4.3-r1
+pkg:libfontenc 1.1.8-r0
+pkg:libgcc 13.2.1_git20240309-r1
+pkg:libice 1.1.1-r6 bce03aa0113e8d03f47a5a0d2218aae3d1b68c0f522ee10f3c179f1f97c218f5
+pkg:libice-dev 1.1.1-r6
+pkg:libid3tag 0.16.2-r2
+pkg:libintl 0.22.5-r0
+pkg:libjpeg-turbo 3.0.3-r0
+pkg:libjpeg-turbo-dev 3.0.3-r0
+pkg:libmd 1.1.0-r0 a11b322a135359d410d7b72414108e411d3452057fb9a57b24fe3559b5197c64
+pkg:libmount 2.40.1-r1
+pkg:libncursesw 6.4_p20240420-r2 0d495180e37c6ac07a6c51be17e91464719857c8975c15091078d5c3b8495650
+pkg:libogg 1.3.5-r5
+pkg:libpanelw 6.4_p20240420-r2
+pkg:libpcap 1.10.4-r1
+pkg:libpciaccess 0.18.1-r0
+pkg:libpng 1.6.57-r0 6aeaf1bc3a50ab433dfba8914498e412826cf848b0ef082f6314d733d9b30136
+pkg:libpng-dev 1.6.57-r0
+pkg:librsvg 2.58.5-r0
+pkg:libsharpyuv 1.3.2-r0
+pkg:libsm 1.2.4-r4 0b4a28dfb1f36bc03aa6b7147c3dc9e48d0d5e49dfa4582ef49eeef5fa353001
+pkg:libsm-dev 1.2.4-r4
+pkg:libsmartcols 2.40.1-r1
+pkg:libsndfile 1.2.2-r1
+pkg:libssl3 3.3.7-r0
+pkg:libstdc++ 13.2.1_git20240309-r1
+pkg:libturbojpeg 3.0.3-r0
+pkg:libuuid 2.40.1-r1 365f1c1343629aa5540a8d3650a30b809216dda435cb227abe6776dbe765b629
+pkg:libvorbis 1.3.7-r2
+pkg:libwebp 1.3.2-r0
+pkg:libwebpdemux 1.3.2-r0
+pkg:libx11 1.8.9-r1 7c24c705a19881325a0f923c5129eeeefa2dfc099826955939c4fb4997e1f1b3
+pkg:libx11-dev 1.8.9-r1
+pkg:libxau 1.0.11-r4 464b53b0503c08c175ba328f899ca4ebde3108bc72f42bd55790eb7addbec567
+pkg:libxau-dev 1.0.11-r4
+pkg:libxaw 1.0.16-r1 32ac48fa9b73efdd7e8aabed4ce8571c35119e47bff37915a7aea11a1159bd65
+pkg:libxcb 1.16.1-r0 d171a9ff07fc2f399a50bfeec5943355f4e1a4b1e7d8208b8baebfc8652e5f00
+pkg:libxcb-dev 1.16.1-r0
+pkg:libxcomposite 0.4.6-r5
+pkg:libxcursor 1.2.2-r1
+pkg:libxcvt 0.1.2-r0
+pkg:libxdamage 1.1.6-r5
+pkg:libxdmcp 1.1.5-r1 5a216557875ae938fe7d71e4027879d6ba80b2a7c13748c60fe6fbd0a8e8d695
+pkg:libxdmcp-dev 1.1.5-r1
+pkg:libxext 1.3.6-r2 4bb8de65da23941405b080a024008860628e246164542c6d34f0fd2c680b18a5
+pkg:libxext-dev 1.3.6-r2
+pkg:libxfixes 6.0.1-r4
+pkg:libxfont2 2.0.6-r4
+pkg:libxft 2.3.8-r3 1d90ae6ebdb742c404ab92389d1692cf4c0574d8a49e9a4b4b85445a1d6a9ac3
+pkg:libxft-dev 2.3.8-r3
+pkg:libxinerama 1.1.5-r4
+pkg:libxinerama-dev 1.1.5-r4
+pkg:libxkbfile 1.1.3-r0
+pkg:libxml2 2.12.10-r0
+pkg:libxmu 1.1.4-r2 be177077132d54f2c030fdabe4a95cfe159f478e9e23125d9e3b9052a61eca96
+pkg:libxmu-dev 1.1.4-r2
+pkg:libxpm 3.5.19-r0 7fe6492090c7a00cb3f0b8667432085421efde3c2932313202e6547848d86e6c
+pkg:libxpm-dev 3.5.19-r0
+pkg:libxrandr 1.5.4-r1
+pkg:libxrender 0.9.11-r5 7474d3f65361540441ca278bed31a54cd88265ca03f7f5283a4065637d2ebb3f
+pkg:libxrender-dev 0.9.11-r5
+pkg:libxshmfence 1.3.2-r6
+pkg:libxt 1.3.0-r5 3822eaeaabc147e1207a030a433b8c6cc96cbe3e72078c6b69370301191663db
+pkg:libxt-dev 1.3.0-r5
+pkg:libxxf86vm 1.1.5-r6
+pkg:linux-firmware-other 20240811-r0
+pkg:mcookie 2.40.1-r1
+pkg:mesa 24.0.9-r1
+pkg:mesa-egl 24.0.9-r1
+pkg:mesa-gbm 24.0.9-r1
+pkg:mesa-gl 24.0.9-r1
+pkg:mesa-glapi 24.0.9-r1
+pkg:mkfontscale 1.2.2-r6
+pkg:mpdecimal 4.0.0-r0
+pkg:mtdev 1.1.6-r3
+pkg:musl 1.2.5-r4 30c35845603654cd37f48c2133c7e4040f7aa5dd38feb66e4b9e96c43e39300a
+pkg:ncurses-terminfo-base 6.4_p20240420-r2 ba1c61cde706f90e4f45f9dc5feec39697808639553ead231fe9c9afdba48642
+pkg:nettle 3.10.2-r0
+pkg:openbox 3.6.1-r8
+pkg:openbox-libs 3.6.1-r8
+pkg:opus 1.5.2-r0
+pkg:pango 1.52.2-r0
+pkg:pcre2 10.43-r0
+pkg:pixman 0.43.2-r0
+pkg:pkgconf 2.2.0-r0
+pkg:ppp 2.5.0-r5
+pkg:ppp-atm 2.5.0-r5
+pkg:ppp-chat 2.5.0-r5
+pkg:ppp-daemon 2.5.0-r5
+pkg:ppp-l2tp 2.5.0-r5
+pkg:ppp-minconn 2.5.0-r5
+pkg:ppp-passprompt 2.5.0-r5
+pkg:ppp-passwordfd 2.5.0-r5
+pkg:ppp-pppoe 2.5.0-r5
+pkg:ppp-radius 2.5.0-r5
+pkg:ppp-winbind 2.5.0-r5
+pkg:python3 3.12.13-r0
+pkg:readline 8.2.10-r0
+pkg:setxkbmap 1.3.4-r0
+pkg:shared-mime-info 2.4-r0
+pkg:sqlite 3.45.3-r3
+pkg:sqlite-dev 3.45.3-r3
+pkg:sqlite-libs 3.45.3-r3
+pkg:st 0.9.2-r0
+pkg:startup-notification 0.12-r7
+pkg:tiff 4.6.0t-r0
+pkg:twm 1.0.12-r1
+pkg:util-linux 2.40.1-r1
+pkg:util-linux-dev 2.40.1-r1
+pkg:util-macros 1.20.0-r0
+pkg:wayland-libs-client 1.22.0-r4
+pkg:wayland-libs-server 1.22.0-r4
+pkg:windowmaker 0.96.0-r0
+pkg:wireless-regdb 2024.05.08-r0
+pkg:xauth 1.1.3-r0
+pkg:xcb-proto 1.16.0-r1
+pkg:xcb-util 0.4.1-r3
+pkg:xcb-util-keysyms 0.4.1-r0
+pkg:xcb-util-wm 0.4.2-r0
+pkg:xf86-input-evdev 2.10.6-r2
+pkg:xf86-video-fbdev 0.5.0-r6
+pkg:xf86-video-vesa 2.6.0-r4
+pkg:xinit 1.4.2-r1
+pkg:xkbcomp 1.5.0-r0
+pkg:xkeyboard-config 2.41-r0
+pkg:xmodmap 1.0.11-r1
+pkg:xorg-server 21.1.14-r0
+pkg:xorg-server-common 21.1.14-r0
+pkg:xorgproto 2024.1-r0
+pkg:xrandr 1.5.2-r0
+pkg:xrdb 1.2.2-r0
+pkg:xsetroot 1.1.3-r1
+pkg:xterm 391-r0 6315e34756acb2253c06db23710dd71506867c71e45bde7a0e01045c4130a49a
+pkg:xtrans 1.5.0-r0
+pkg:xz-libs 5.8.3-r0
+pkg:zlib 1.3.2-r0 5a13ff9246bb9f1043c588a5e686f303f68545d816d56deb2ca0ff86e6540382
+pkg:zlib-dev 1.3.2-r0
+pkg:zstd-libs 1.5.6-r0

@@ -36,6 +36,13 @@ sec sound
 cat /proc/asound/cards 2>/dev/null || echo "no /proc/asound (snd-cs4236 未加载或未探测到 CS4237B)"
 cat /proc/asound/devices 2>/dev/null | head -n 5
 
+sec firmware
+ls /lib/firmware 2>/dev/null || echo "no /lib/firmware"
+
+sec storage
+cat /proc/partitions
+echo "-- PCMCIA/CF 转接卡应表现为 sdX（pata_pcmcia），插卡后看 dmesg"
+
 sec modem
 ls /dev/modems 2>/dev/null || echo "MWave 未初始化（见 /etc/modprobe.d/mwave.conf）"
 

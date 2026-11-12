@@ -1,19 +1,30 @@
-# 上游源码与构建产物（不入库；tarball 保留在本地，配方/脚本可随时重建）
-kernel/src/
-busybox/src/
-busybox/build/
-toolchain/src/
-toolchain/musl-i486/
-build/
-build-logs/
+# 下载缓存和解压后的上游源码；版本、URL 与校验和由 scripts/fetch-sources.sh 记录。
+/kernel/src/
+/busybox/src/
+/toolchain/src/
+
+# 打包用到的上游 tarball（万一落在树上也不入库）
 *.tar.xz
 *.tar.bz2
 *.tar.gz
-busybox/initramfs/.staging/
 
-# 本机交叉编译产物（musl-amd64 等按目标命名的目录一并忽略）
+# 本机工具链和全部派生制品。
+/toolchain/musl-i486/
 /toolchain/musl-amd64/
 /toolchain/grub4dos-*/
+/busybox/build/
+/busybox/initramfs/.staging/
+/build/
+/build-logs/
+
+# 本地部署/模拟器产物。
+/*.img
+/*.qcow2
+/*.iso
+
+# 构建中断可能留下的原子写入临时文件。
+*.tmp
+*.tmp.*
 
 # Python 缓存
 __pycache__/
