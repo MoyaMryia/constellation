@@ -250,14 +250,6 @@ ln -sfn /dev/psaux "$WORK/root/dev/mouse"
 # 上游 fstab 里还有 /dev/fd0 -> /fd。目录不存在的话 mount 会报错。
 mkdir -p "$WORK/root/hda1" "$WORK/root/fd"
 
-# 4.4c Constellation 的 fetch（Mark + 系统信息）。BL3 自带的 /usr/bin/fetch 是
-# 它自己的东西，不覆盖，改用 cfetch。
-mkdir -p "$WORK/root/usr/share/constellation"
-cp "$ROOT/rootfs-770ed/usr/share/constellation/logo.txt"  "$WORK/root/usr/share/constellation/"
-cp "$ROOT/rootfs-770ed/usr/share/constellation/logo16.txt" "$WORK/root/usr/share/constellation/"
-cp "$ROOT/rootfs-770ed/usr/bin/fetch" "$WORK/root/usr/bin/cfetch"
-chmod 0755 "$WORK/root/usr/bin/cfetch"
-
 # 4.5 说明放在 /root
 cat > "$WORK/root/root/README.constellation" <<'EOF'
 这是 BasicLinux 3.5 LCARS（kernel 2.2.26，CONFIG_M686 = Pentium II 专用内核）。
