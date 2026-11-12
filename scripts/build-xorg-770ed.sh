@@ -168,6 +168,10 @@ build_auto "xf86-input-mouse-1.9.5" \
 build_auto "xkbcomp-1.4.7" \
   "https://www.x.org/releases/individual/app/xkbcomp-1.4.7.tar.xz" "$XKBCOMP_SHA"
 
+# ---------- 4b) probe：诊断 SIGILL 落在哪个共享库 ----------
+"$CC_WRAP" -Os -static -o "$DEST/usr/bin/probe" "$ROOT/tools/probe.c"
+echo "xorg: probe 安装完成（/usr/bin/probe <程序> 可定位 SIGILL 的库）"
+
 # ---------- 5) 动态 musl（我们的 Xorg 及其模块要用它） ----------
 mkdir -p "$DEST/lib"
 cp "$MUSL_PREFIX/lib/libc.so" "$DEST/lib/libc.so"
