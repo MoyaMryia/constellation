@@ -1,14 +1,6 @@
 #!/bin/sh
-# xinit 的会话脚本：窗口管理器 + 一个终端。
-#
-# 选择顺序：ours(JWM/musl i486) → twm（Alpine 的，已验证能在 PII 上跑）。
-# 不用 icewm/jwm(Alpine 包)：它们是 Pentium III(SSE) 基线，PII 上 SIGILL。
-xrdb -merge /etc/X11/Xresources 2>/dev/null || true
-
-if [ -x /usr/bin/jwm ]; then
-  /usr/bin/jwm -c /etc/jwm/jwmrc &
-elif [ -x /usr/bin/twm ]; then
-  /usr/bin/twm &
-fi
-
-exec /usr/bin/xterm -fa "DejaVu Sans Mono" -fs 11 -bg black -fg white
+# xinit 会话：直接以 JWM 作为会话主进程（JWM 是我们自己用 musl i486 编的，
+# 二进制里 SSE 指令为 0）。不再默认拉起 xterm/xrdb —— 它们是 Alpine 的
+# Pentium III 基线二进制，在 PII 上会 SIGILL；需要终端时装一个自编的即可
+# （见 docs/thinkpad-770ed.md §6.1）。
+exec /usr/bin/jwm -f /etc/jwm/jwmrc

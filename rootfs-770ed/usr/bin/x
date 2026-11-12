@@ -77,17 +77,21 @@ Section "Screen"
     EndSubSection
 EndSection
 
+# 输入驱动用 kbd + mouse（老式、走 /dev/ttyX 与 /dev/input/mice），
+# 不用 evdev：evdev 硬依赖 libudev，而 eudev 也是 SSE 基线（实测 SIGILL）。
 Section "InputDevice"
     Identifier "Keyboard0"
-    Driver "evdev"
-    Option "Device" "/dev/input/$KBD"
+    Driver "kbd"
+    Option "AutoRepeat" "500 30"
 EndSection
 
 Section "InputDevice"
     Identifier "Mouse0"
-    Driver "evdev"
-    Option "Device" "/dev/input/$MOUSE"
+    Driver "mouse"
+    Option "Protocol" "IMPS/2"
+    Option "Device" "/dev/input/mice"
     Option "Emulate3Buttons" "true"
+    Option "ZAxisMapping" "4 5"
 EndSection
 CONFEOF
 

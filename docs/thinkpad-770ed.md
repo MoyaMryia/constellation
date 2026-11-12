@@ -181,30 +181,47 @@ sudo dd if=build/constellation-770ed.img of=/dev/sdX bs=4M conv=fsync status=pro
 | 挂起/电池状态 | ✅ `/proc/apm` | 读 `/proc/apm` 即可看电池与交流状态（`hwcheck` 会打印）。挂起动作本身由 Fn+F4 或 BIOS 触发。 |
 | 无线固件 | ⚠️ 不含 | `b43`/`atmel`/`spectrum`/`p54` 需要 `/lib/firmware` 中的固件；镜像不带（许可证与体积原因）。dmesg 会点名要哪个文件。 |
 
-## 6.1 图形桌面：能到哪一步、卡在哪
+## 6.1 图形桌面：X 已经跑起来了（自编 i486 版）
 
-| 组件 | 状态 | 证据 |
+Alpine 的 **x86** 归档基线是 Pentium III（SSE），这是这次最大的坑。770ED 是
+Pentium II，没有 SSE，于是"装个 X 就能用"的路走不通——**实测每撞一次就抓到
+一个库**（用 `usr/bin/probe` 这个 ptrace 小工具定位 SIGILL 落在哪个 .so）：
+
+| 撞到的库 | 症状 | 处置 |
 |---|---|---|
-| 帧缓冲 | ✅ | tridentfb（真机）/ vesafb（QEMU，`gfxpayload=1024x768x16`）→ `/proc/fb` |
-| 窗口管理器 | ✅ **自己编的 JWM 2.4.6** | `scripts/build-jwm-770ed.sh`，musl i486，`objdump` 里 SSE 指令计数 **0** |
-| 兜底 WM | ✅ Alpine `twm` | 纯 C，PII 上可跑 |
-| X 客户端 | ✅ | `xterm`、`setxkbmap`、`xauth`、`xrandr` 在 PII 上正常 |
-| X 服务器 | ❌ | `Xorg` 在 PII 上启动即 `Illegal instruction`（`-version` 正常，说明二进制本身能加载） |
-| IceWM / JWM(Alpine) / FVWM / Openbox / WindowMaker | ❌ | 全部在 `libgcc_s.so.1` / `libWUtil.so` 里 `trap invalid opcode` |
+| `libpciaccess` | `pci_slot_match_iterator_create` 里用 `movups` 拷贝结构体 | 自编 |
+| `libpixman` | 服务器初始化即 SIGILL | 自编（`-Dsse2/mmx/ssse3=disabled`） |
+| `libz` | inflate/CRC 快速路径 | 自编（`configure --archs="-march=i486"`） |
+| `libXfont2` / `libfontenc` / `libXau` / `libXdmcp` / `libmd` / `libxcvt` | 字体/认证初始化 | 自编 |
+| `libX11` / `libxcb` / `libxkbfile` | `xkbcomp` 编译键表时 SIGILL | 自编 |
+| `libudev`(eudev) | evdev 驱动初始化时 SIGILL | 改用 `kbd`+`mouse` 驱动，服务器 `-Dudev=false`，彻底不用 udev |
 
-根因：**Alpine 的 x86 归档基线是 Pentium III（SSE）**。实测 `libgcc_s.so.1`
-里有 1325 条 SSE 指令且 `.note.gnu.property` 写明 `x86 feature used: … XMM`；
-`libcrypto.so.3`（`pppd` 因此崩）、`libWUtil`、`libgcc_s`（IceWM/JWM/FVWM/
-Openbox）都在其列。Pentium II 没有 SSE，于是 SIGILL。
+另外两个必须记住的细节：
 
-可选出路（按代价排序）：
+1. **X 服务器必须动态链接 musl**。本工程的工具链原来是纯静态 musl，静态 libc
+   的 `dlopen` 是空实现，服务器加载驱动模块会直接报
+   `Failed to load fbdev_drv.so: Dynamic loading not supported`。
+   现在 `build-core-770ed.sh` 用 `--enable-shared` 建 musl，并把
+   `/lib/libc.so` + `/lib/ld-musl-i486.so.1` 装进 rootfs（与 Alpine 的
+   `/lib/ld-musl-i386.so.1` 各自服务各自那批二进制，互不干扰）。
+2. **`-fno-stack-protector`**：宿主 gcc 默认开 SSP，会引用 glibc 的
+   `__stack_chk_fail_local`，musl 没有这个符号（链接期报 undefined）。
 
-1. **从源码编一个 i486 基线的 X 服务器**（xf86-video-fbdev + 最小扩展无
-   GLX/DRI）。这是"把图形补齐"的正经做法，但 xorg-server 有 20+ 个依赖
-   （xcb/pixman/xfont2/xkeyboard-config…），属于独立的工程阶段。
-2. 换一台 **Pentium III 及以后**的机器（如 770X/770Z 也是 PII，不行；T2x 可以），
-   那样现在的 Alpine X 栈可以直接用。
-3. 只做**纯帧缓冲的字符界面**（本镜像现状）：控制台 + framebuffer，无 X。
+现状（QEMU `-cpu pentium2` 实测）：
+
+| 组件 | 状态 |
+|---|---|
+| 帧缓冲 | ✅ `vesafb`（QEMU）/ `tridentfb`（真机），1024×768×16 |
+| **X 服务器（自编 21.1.14）** | ✅ 起屏成功：`FBDEV(0): Depth 16`、扩展初始化、`Mouse0: ps2EnableDataReporting: succeeded`，退出时 `Server terminated successfully (0)`，全程无 SIGILL |
+| 输入 | ✅ `kbd` 驱动 + `mouse` 驱动（PS/2，TrackPoint 走 `/dev/input/mice`） |
+| 键表 | ✅ 自编 `xkbcomp` 可用（`XkbDisable` 不再需要） |
+| **窗口管理器 JWM（自编 2.4.6）** | ✅ `jwm -f /etc/jwm/jwmrc` 在 PII 上跑起来（ps 可见），IceWM 风格任务栏/菜单 |
+| 会话自启（`/usr/bin/x`） | ⚠️ 一次性验通过，最后一轮重编后又出现"客户端先退导致 X 正常退出"的现象，属会话接线问题（不是 SSE），待一轮调试 |
+| 终端 xterm / xrdb | ❌ Alpine 版仍 SSE（`libXt`/自身），需要照同样办法自编 |
+
+复现：`scripts/build-xlibs-770ed.sh`（10 个库）+ `scripts/build-xorg-770ed.sh`
+（服务器 + fbdev/kbd/mouse 驱动 + xkbcomp）+ `scripts/build-jwm-770ed.sh`。
+每个脚本结束都会打印"SSE 指令计数"，全 0 才算过。
 
 ## 7. 验收
 

@@ -23,17 +23,10 @@
       <Background>#4a6d8c:#1f5f8b</Background>
       <Outline>#12222e</Outline>
     </Active>
-    <Inactive>
-      <Foreground>#c8d4e0</Foreground>
-      <Background>#46535f:#323a42</Background>
-      <Outline>#1b2733</Outline>
-    </Inactive>
   </WindowStyle>
 
   <TaskListStyle>
     <Font>Sans-10</Font>
-    <ActiveForeground>#ffffff</ActiveForeground>
-    <ActiveBackground>#1f5f8b</ActiveBackground>
     <Foreground>#dbe6f0</Foreground>
     <Background>#323a42</Background>
   </TaskListStyle>
@@ -95,7 +88,6 @@
   </Tray>
 
   <!-- ============ 行为 ============ -->
-  <StartupCommand># 启动后可放 setxkbmap 之类</StartupCommand>
   <DoubleClickSpeed>400</DoubleClickSpeed>
   <DoubleClickDelta>2</DoubleClickDelta>
   <FocusModel>sloppy</FocusModel>

@@ -73,7 +73,7 @@ if [ "${FORCE_TOOLCHAIN:-0}" = 1 ] || [ "$stale" = 1 ]; then
   ( cd "$MUSL_SRC" && \
     CC="$HOSTCC" AR="$HOSTAR" RANLIB="$HOSTRANLIB" \
     CFLAGS="-m32 -march=i486 -Os -pipe -fomit-frame-pointer" \
-    ./configure --target=i486-linux-musl --prefix="$MUSL_PREFIX" --disable-shared )
+    ./configure --target=i486-linux-musl --prefix="$MUSL_PREFIX" --enable-shared )
   make -C "$MUSL_SRC" -j"$JOBS"
   make -C "$MUSL_SRC" install
 

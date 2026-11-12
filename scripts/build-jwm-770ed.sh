@@ -53,6 +53,9 @@ export PATH=$ROOT/toolchain/musl-i486/bin:$PATH
 export PKG_CONFIG_PATH=$STAGE/usr/lib/pkgconfig
 export PKG_CONFIG_SYSROOT_DIR=$STAGE
 cd "$SRC"
+# 工具链改过（例如 musl 从静态改成共享）时必须重跑 configure，
+# 否则会链接到上一轮的产物并报 "final link failed: bad value"
+make distclean >/dev/null 2>&1 || true
 # 关键：--disable-pango —— Pango 走 glib，而 glib/gtk 系在 PII 上同样会踩
 # Alpine 的 SSE 代码（也是我们不用 icewm 的原因）。JWM 自己的绘制够用。
 ./configure --host=i486-linux-musl --build="$(uname -m)-linux-gnu" \
@@ -60,7 +63,7 @@ cd "$SRC"
   --x-includes="$STAGE/usr/include" --x-libraries="$STAGE/usr/lib" \
   CC=i486-linux-musl-gcc \
   CPPFLAGS="-I$STAGE/usr/include" \
-  CFLAGS="-Os -march=i486 -pipe" \
+  CFLAGS="-Os -march=i486 -pipe -fno-stack-protector" \
   LDFLAGS="-L$STAGE/usr/lib -Wl,-rpath,/usr/lib -Wl,-rpath-link,$STAGE/usr/lib" \
   >/dev/null
 make -j"$JOBS" >/dev/null
@@ -75,6 +78,9 @@ fi
 # 否则要到真机上才发现 "Error loading shared library libjpeg.so.8"。
 missing=
 for need in $(readelf -d src/jwm | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p'); do
+  # libc.so 是本工程 musl 的 SONAME（运行时由 /lib/ld-musl-i486.so.1 提供），
+  # 不在这份"缺失库"检查里——它由 build-xorg-770ed.sh 统一安装。
+  case "$need" in libc.so) continue ;; esac
   [ -e "$DEST/usr/lib/$need" ] || [ -e "$DEST/lib/$need" ] || missing="$missing $need"
 done
 if [ -n "$missing" ]; then
