@@ -10,6 +10,8 @@
 - [x] s6 全家桶：skalibs 2.15.1.0 + execline 2.9.9.2 + s6 2.15.1.0 + s6-rc 0.7.0.0（静态 i486，`build/m2root/usr`）
 - [x] syslinux 硬盘启动：FAT boot + ext4 root，`/sbin/init` 挂载 proc/sysfs/devtmpfs 后 exec `s6-svscan /etc/s6`
 - [x] QEMU 冒烟：`constellation login:` 出现在串口
+- [x] M2 rootfs 模板与组装入口：`rootfs/` + `scripts/build-rootfs.sh`
+- [x] IPv4 + BusyBox ip/udhcpc 配置（真机 DHCP 待 M3 验收）
 - [ ] apk-tools 移植（下一步）
 - [ ] 基础软件仓库 ~30 包
 - [ ] T0 实测需求表
@@ -34,7 +36,7 @@
 /lib/modules/6.18.44  # 内核模块（从 build/modroot 拷贝）
 /etc/s6/getty/run     # exec /bin/getty -L ttyS0 115200 vt100
 /etc/s6/getty/supervise/
-/etc/passwd           # root 空密码
+/etc/passwd           # root 默认锁定；测试登录需显式传 ROOT_PASSWORD_HASH
 ```
 
 ## 内核侧踩坑（L4 补开）
@@ -50,4 +52,7 @@
   zlib 1.2.11 / mbedtls 2.28 / openssl 3.0.2 静态依赖已装入 build/crossdeps，
   源码已 patch mbedtls 分支与 crypto_mbedtls.c 的 2.x 兼容问题。
   剩余阻塞：libfetch 的 TLS/链接（网络非当前重点，暂缓）。
-- 磁盘镜像脚本化（`mkimage`）：把 rootfs、模块、内核、syslinux 自动打成可启动磁盘。
+- 部署脚本 `scripts/deploy.sh`：在 Linux 宿主上直接把 rootfs、模块、内核、
+  syslinux 部署到目标磁盘（块设备或镜像文件），无需先拼磁盘镜像。脚本只使用
+  宿主可信安装的 syslinux，并拒绝已挂载/swap/holder/已绑定 loop 的目标；新版
+  安全检查仍待 root 环境全链路复测。磁盘部署不纳入当前核心正确性验收。

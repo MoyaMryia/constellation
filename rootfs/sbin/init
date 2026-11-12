@@ -1,0 +1,17 @@
+#!/bin/sh
+export PATH=/bin:/usr/bin
+
+mount -t proc proc /proc || exec sh
+mount -t sysfs sysfs /sys || exec sh
+mount -t devtmpfs devtmpfs /dev || exec sh
+mount -o remount,rw / || exec sh
+hostname "$(cat /etc/hostname)"
+
+# These drivers are modules to preserve the 24 MiB baseline. modprobe resolves
+# their dependency chains and harmlessly fails when the hardware is absent.
+modprobe i82365 2>/dev/null || true
+modprobe pcnet_cs 2>/dev/null || true
+modprobe ne2k-pci 2>/dev/null || true
+
+echo 'Constellation M2: starting s6-svscan'
+exec s6-svscan /etc/s6

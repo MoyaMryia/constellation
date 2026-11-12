@@ -10,3 +10,10 @@ build-logs/
 *.tar.bz2
 *.tar.gz
 busybox/initramfs/.staging/
+
+# 本机交叉编译产物（musl-amd64 等按目标命名的目录一并忽略）
+/toolchain/musl-amd64/
+/toolchain/grub4dos-*/
+
+# Python 缓存
+__pycache__/

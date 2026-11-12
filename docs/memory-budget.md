@@ -77,7 +77,10 @@ Constellation 的失败，而是坐标系上另一个合法的极端点。
 - [ ] zram 压力下交互延迟主观评估
 - [ ] 回填本表并签发 T0 正式需求表
 
-### 4.1 实测快照（2026-08，仅 6.18.44，详见 kernel/NOTES.md）
+### 4.1 历史实测快照（2026-08，仅 6.18.44，详见 kernel/NOTES.md）
+
+以下 L4 数据测于补入 IPv4、多用户权限模型、旧 IDE 回退和基础 hardening 之前。
+这些数据保留为历史基线，当前 L4 配置必须重新测量后才能签发正式 T0 需求表。
 
 QEMU 6.2 `-cpu pentium -m 24`，L0 = tinyconfig + 串口/init/devtmpfs/proc/sysfs：
 
