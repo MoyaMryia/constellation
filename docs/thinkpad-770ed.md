@@ -224,6 +224,51 @@ traps: (内核日志里 0 条 invalid opcode)
 真机路径不变：`tridentfb` 提供 `/dev/fb0`（1024×768×16）→ X 走 `fbdev`
 驱动；`Keyboard0`/`Mouse0` 用 kbd/mouse（TrackPoint 走 `/dev/input/mice`）。
 
+## 6.2 指点设备：到底是 /dev/psaux 还是 /dev/input/mice？
+
+**两个都是同一股数据流，只是名字新旧不同。** 结论先给：365X/365XD 与 770ED
+的 TrackPoint 都是 **PS/2 指点设备**（接 i8042 的 AUX 口），Linux 里的数据通路是
+
+```
+i8042 AUX 口 → serio → psmouse → input 设备 → mousedev ┬→ /dev/input/mice   (13,63) 混合设备
+                                                      ├→ /dev/input/mouse0  (13,32) 单个设备
+                                                      ├→ /dev/input/eventN  evdev
+                                                      └→ /dev/psaux         (10,1)  传统别名
+```
+
+- `/dev/psaux` 是 **mousedev 提供的兼容别名**，内容和 `/dev/input/mice`
+  完全一样（内核 Kconfig 原文：*"The data available through /dev/psaux is
+  exactly the same as the data from /dev/input/mice"*）。它只有在
+  `CONFIG_INPUT_MOUSEDEV_PSAUX=y` 时才存在；6.6/6.18 默认**不开**，
+  所以"新装的系统里找不到 /dev/psaux"是正常的。
+- 90 年代的 `XF86Config` 写的是 `Option "Device" "/dev/psaux"` +
+  `Option "Protocol" "PS/2"`，这就是"365X 用的是 /dev/psaux"这个记忆的来源。
+  现代 X（`xf86-input-mouse`）两套都认：`PS/2` 与 `IMPS/2` 都在它的协议表里。
+
+本风味的处理：**两个都提供，并自动选**。
+
+1. 内核 `CONFIG_INPUT_MOUSEDEV=y` + `CONFIG_INPUT_MOUSEDEV_PSAUX=y`
+   （6.6 与 6.18 两条线的 770ED 配置、以及 i486/365X 线的 L4 配置都已打开）。
+2. `/usr/bin/x` 的选择顺序：`/dev/input/mice`（`IMPS/2`）→ 没有则
+   `/dev/psaux`（`PS/2`）→ 再没有则退回 evdev 的 `eventN`。
+
+实测（QEMU `-cpu pentium2`，PS/2 鼠标由 i8042 提供）：
+
+```
+crw------- 1 13, 32 /dev/input/mouse0
+crw------- 1 13, 63 /dev/input/mice
+crw------- 1 10,  1 /dev/psaux            ← 打开 PSAUX 后出现
+
+N: Name="ImExPS/2 Generic Explorer Mouse"
+H: Handlers=mouse0 event1
+
+# /dev/input/mice + IMPS/2   → Mouse0: ps2EnableDataReporting: succeeded
+# /dev/psaux      + PS/2     → Mouse0: ps2EnableDataReporting: succeeded
+```
+
+两条路都验证过；`ps2EnableDataReporting` 成功就说明确实在跟 AUX 口上的
+PS/2 设备对话，而不是空设备。
+
 ## 7. 验收
 
 ### 7.1 已经实测的（QEMU，i440FX + PIIX3 + PII，64 MiB，真实引导链非 `-kernel`）

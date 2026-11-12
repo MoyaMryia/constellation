@@ -87,6 +87,10 @@ CONFIG_MOUSE_PS2=y
 CONFIG_MOUSE_PS2_TRACKPOINT=y
 CONFIG_INPUT_MOUSEDEV=y
 CONFIG_INPUT_EVDEV=y
+# /dev/psaux（char 10:1）：mousedev 提供的**传统别名**，与 /dev/input/mice
+# 是同一股数据流。老 ThinkPad 的 XF86Config 习惯写 /dev/psaux + Protocol "PS/2"，
+# 打开它可以让这类老配置/老工具直接可用；不打开时只有 /dev/input/mice。
+CONFIG_INPUT_MOUSEDEV_PSAUX=y
 
 # ---------------------------------------------------------------- USB（机内）
 # PIIX4 的 UHCI 控制器编入内核：机内唯一的 USB 口必须"不 modprobe 也能用"。
