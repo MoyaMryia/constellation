@@ -157,10 +157,21 @@ if [ "$INSTALL_X" = 1 ]; then
     usr/lib/libbrotlicommon.so.1.1.0 usr/lib/libbrotlicommon.so.1
     usr/lib/libxshmfence.so.1.0.0 usr/lib/libxshmfence.so.1
     lib/libudev.so.1.6.3 lib/libudev.so.1 lib/libuuid.so.1.3.0 lib/libuuid.so.1
+    lib/libcrypto.so.3 lib/libcrypto.so lib/libssl.so.3 lib/libssl.so
+    lib/libcom_err.so.2.1 lib/libkeyutils.so.1.10 lib/libkrb5support.so.0.1
     usr/lib/libXfixes.so.3.1.0 usr/lib/libXfixes.so.3
     usr/lib/libXinerama.so.1.0.0 usr/lib/libXinerama.so.1
     usr/bin/twm usr/bin/xauth usr/bin/mcookie usr/bin/xinit
-    usr/lib/libXau.so.6 usr/lib/libXdmcp.so.6
+    # 下面这些是仍在用 Alpine musl 的遗留工具：运行时用不到，而且 Alpine 的
+    # musl 自带 XMM（memcpy 之类）——一起清掉后镜像里只剩我们自己的 i486 musl。
+    # 注意：PURGE 是双引号字符串，注释里不能再出现双引号，否则字符串提前闭合
+    # （症状：build-rootfs 报 'Alpine: not found'，退出码 127）。
+    usr/bin/cxpm usr/bin/xmodmap usr/sbin/chat usr/bin/chat
+    usr/bin/fc-cache usr/bin/fc-cat usr/bin/fc-conflist usr/bin/fc-list
+    usr/bin/fc-match usr/bin/fc-pattern usr/bin/fc-query usr/bin/fc-scan
+    usr/bin/fc-validate usr/lib/libglapi.so.0.0.0 usr/lib/libglapi.so.0
+    # Alpine 的 musl 与它的 soname 软链（我们的二进制用 /lib/ld-musl-i486.so.1）
+    lib/ld-musl-i386.so.1 lib/libc.musl-x86.so.1
   "
   for f in $PURGE; do
     rm -rf "$DEST/$f"

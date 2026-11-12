@@ -559,3 +559,47 @@ scripts/audit-sse-770ed.sh            # 退出码 0 = 干净
 `for` 循环计数，busybox 打开 `FEATURE_SH_MATH`/`FEATURE_SH_MATH_64`
 （注意符号名不是 `ASH_MATH_SUPPORT`，写错会被 Kconfig 静默丢弃）。
 
+### 12.3 第二轮：按指令族扫描（SSE/AVX/3DNow）与"内核侧"的区别
+
+第一轮只找 `xmm`，第二轮把审计脚本改成按指令族分类，并且扫描**所有** ELF
+（不只是生效的），外加内核模块与 `vmlinux`：
+
+| 类别 | PII 支持？ | 说明 |
+|---|---|---|
+| `%xmm` | ❌ 不支持 | SSE/SSE2/SSE3/SSSE3/SSE4 都用它 |
+| `%ymm` / `%zmm` / `vzeroupper` | ❌ | AVX / AVX-512 |
+| `pfadd/pfmul/femms/prefetchw…` | ❌ | 3DNow!（AMD 专用，Intel 上 `#UD`） |
+| `%mm0-7` | ✅ 支持 | MMX；镜像里有 2900+ 条，属正常（PII 有 MMX） |
+
+这一轮又抓到两处：
+
+1. **`/lib/libcrypto.so.3`、`/lib/libssl.so.3`** 还躺在镜像里（Alpine 的 openssl，
+   `xmm` 18000+ 条、还有 AVX）。没人链接它们（pppd 已删），但留着就是隐患——删。
+2. **Alpine 的 musl 本体**（`/lib/ld-musl-i386.so.1`）也在，而且它的
+   `.note.gnu.property` 写着 `XMM used`（memcpy 之类有 SSE 快路径）。当时还有
+   14 个文件在用它（`xmodmap`、`fc-*`、`cxpm`、`chat`、`libglapi`…），运行时
+   都用不到 —— 全部删掉。现在镜像里**只剩下我们自己 i486 编的 musl**。
+
+顺带踩到一个 ELF 细节：musl 把 x86 架构名归一化成 `i386`，所以动态链接器请求
+的名字是 **`/lib/ld-musl-i386.so.1`**（不是 `i486`）。之前 build-xorg 装成了
+`ld-musl-i486.so.1`，一直靠 Alpine 的那个顶着；把 Alpine 的 musl 删掉之后
+Xorg/jwm/st 全部报 `not found`（找不到 interpreter）。现在两个名字都装
+（`i486` 是指向 `i386` 的软链）。
+
+**内核侧的命中不用管**：`vmlinux` 里扫出 9 条 `prefetchw`、`selftests.ko` 里 1 条
+——它们在 `ALTERNATIVE` 段，启动时按 CPU 特性被替换成 `nop`（同一段里还有
+`rdtscp`/`popcnt`/`stac`/`wrmsr` 等）。内核本身用 `-mno-sse` 编译，热路径不可能
+出现 SSE；审计脚本把内核命中单独列为"信息"，不判失败。
+
+### 12.4 现在的结论
+
+```
+用户空间 ELF: 213   内核模块: 298   vmlinux: 有
+  MMX 指令 2900+ 条（PII 支持，正常）
+  ℹ️ 内核侧命中：ALTERNATIVE 段，安全
+  ✅ 没有 SSE / AVX / 3DNow 指令
+```
+
+镜像 67 MB；`constellation-770ed.img` / `-g4d.img` 各 3985 MB（4 GB CF 卡）。
+桌面实跑：`Xorg + JWM + st` 同时在线，内核日志 0 条 `invalid opcode`。
+

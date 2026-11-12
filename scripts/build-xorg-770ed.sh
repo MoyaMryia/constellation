@@ -201,8 +201,13 @@ echo "xorg: probe 安装完成（/usr/bin/probe <程序> 可定位 SIGILL 的库
 # ---------- 5) 动态 musl（我们的 Xorg 及其模块要用它） ----------
 mkdir -p "$DEST/lib"
 cp "$MUSL_PREFIX/lib/libc.so" "$DEST/lib/libc.so"
-cp "$MUSL_PREFIX/lib/libc.so" "$DEST/lib/ld-musl-i486.so.1"
-echo "xorg: 已装 /lib/libc.so 与 /lib/ld-musl-i486.so.1（我们的 musl 1.2.5）"
+# 注意：musl 把 x86 的架构名归一化成 i386，所以**动态链接器请求的名字是
+# /lib/ld-musl-i386.so.1**（不是 i486）。之前这里装成 i486，全靠 Alpine 的
+# ld-musl-i386.so.1 顶着；一旦把 Alpine 的 musl 清掉，我们的 Xorg/jwm/st 就
+# 全部 "not found"（ELF 找不到 interpreter）。
+cp "$MUSL_PREFIX/lib/libc.so" "$DEST/lib/ld-musl-i386.so.1"
+ln -sf ld-musl-i386.so.1 "$DEST/lib/ld-musl-i486.so.1"
+echo "xorg: 已装 /lib/libc.so 与 /lib/ld-musl-i386.so.1（我们的 musl 1.2.5）"
 
 # ---------- 6) 依赖自检 ----------
 missing=
