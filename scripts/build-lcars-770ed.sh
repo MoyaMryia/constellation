@@ -173,7 +173,11 @@ cat > "$WORK/root/etc/fstab" <<'EOF'
 /dev/hda2  swap   swap  defaults        0 0
 proc       /proc  proc  defaults        0 0
 EOF
-: > "$WORK/root/etc/mtab" 2>/dev/null || true
+# 上游把 /etc/mtab 做成了 -> /proc/mounts 的软链；2.2 时代的 mount 不会去跟，
+# 每次执行都报 "can't open /etc/mtab"。换成真的空文件（mount 会自己写）。
+rm -f "$WORK/root/etc/mtab"
+: > "$WORK/root/etc/mtab"
+chmod 0644 "$WORK/root/etc/mtab"
 
 # 4.3b 恢复可执行位：上游仓库里**所有文件都是 0644**（从一个没保留权限的
 # 地方提交的，git ls-files 里 0 个 100755）。不修的话内核 exec /sbin/init 会
@@ -241,6 +245,10 @@ mknode ram0 b 1 0 660; mknode ram1 b 1 1 660; mknode ram2 b 1 2 660
 mknode loop0 b 7 0 660
 # 上游把 mouse 指向串口鼠标；PS/2 触控板用 psaux，两个都留着
 ln -sfn /dev/psaux "$WORK/root/dev/mouse"
+
+# 4.4b 挂载点：上游 /etc/rc 会把 /dev/hda1 挂到 /hda1（找 swap.img），
+# 上游 fstab 里还有 /dev/fd0 -> /fd。目录不存在的话 mount 会报错。
+mkdir -p "$WORK/root/hda1" "$WORK/root/fd"
 
 # 4.5 说明放在 /root
 cat > "$WORK/root/root/README.constellation" <<'EOF'

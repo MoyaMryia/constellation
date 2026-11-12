@@ -30,7 +30,8 @@ case "$PASSWORD" in
 esac
 
 rm -rf "$DEST"
-mkdir -p "$DEST/bin" "$DEST/dev" "$DEST/proc" "$DEST/root" "$DEST/sbin" \
+mkdir -p "$DEST/bin" "$DEST/dev" "$DEST/dev/pts" "$DEST/proc" "$DEST/sys" \
+         "$DEST/run" "$DEST/tmp" "$DEST/boot" "$DEST/root" "$DEST/sbin" \
   "$DEST/sys" "$DEST/tmp" "$DEST/usr/bin" "$DEST/usr/sbin" \
   "$DEST/etc/s6" "$DEST/etc/modprobe.d" "$DEST/lib/modules" "$DEST/var/log"
 chmod 0700 "$DEST/root"
@@ -249,7 +250,22 @@ done
 chmod 0644 "$DEST/etc/passwd" "$DEST/etc/group" "$DEST/etc/securetty" "$DEST/etc/mdev.conf"
 chmod 0600 "$DEST/etc/shadow"
 printf 'constellation\n' > "$DEST/etc/hostname"
-printf '/dev/sda2 / ext4 rw,relatime 0 1\nproc /proc proc defaults 0 0\nsysfs /sys sysfs defaults 0 0\ndevtmpfs /dev devtmpfs mode=0755 0 0\n' > "$DEST/etc/fstab"
+# fstab 只是给"人"和 mount -a/swapon -a 看的：真正的根是内核命令行
+# root= 挂的，swap 由 init 按命令行 cswap= 启用。但内容必须和实际布局一致——
+# 之前这里把根写成了 /dev/sda2，而 p2 是 swap 分区（布局 p1=boot / p2=swap /
+# p3=root），`mount -a` 会试图把 swap 分区当根挂上。
+cat > "$DEST/etc/fstab" <<'FSTAB'
+# <device>        <mount>  <type>    <options>                    <dump> <pass>
+/dev/sda3         /        ext4      rw,relatime,errors=remount-ro  0      1
+/dev/sda2         none     swap      sw                             0      0
+/dev/sda1         /boot    vfat      ro,noauto                      0      0
+proc              /proc    proc      defaults                       0      0
+sysfs             /sys     sysfs     defaults                       0      0
+devtmpfs          /dev     devtmpfs  mode=0755,nosuid               0      0
+devpts            /dev/pts devpts    gid=5,mode=0620                0      0
+tmpfs             /run     tmpfs     mode=0755,nosuid,nodev         0      0
+tmpfs             /tmp     tmpfs     mode=1777,nosuid,nodev,size=16M 0      0
+FSTAB
 
 # udev 缺席时的惯例：/dev/fd 等由 devtmpfs 提供；/var/log 留空目录。
 

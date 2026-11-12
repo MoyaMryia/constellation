@@ -692,3 +692,40 @@ free:  Mem 63460 / Swap 262136（首次开机自动 mkswap）
 | 现代硬件 | CardBus、USB2、APM、PCMCIA 全套 | 16 位 PCMCIA + USB1.1 |
 | 适合 | 日常用这台 770ED | 体验 1999 年那套软件、极端低配演示 |
 
+## 14. 两个镜像的块设备命名不一样：/dev/sda vs /dev/hda
+
+同一个 CF 卡，在两张镜像里的名字**不同**，因为内核的 ATA 栈不同：
+
+| 镜像 | 内核 | ATA 栈 | 设备名 | 证据 |
+|---|---|---|---|---|
+| `constellation-770ed.img` | 6.6.162 | libata（`ata_piix`） | **`/dev/sda1/2/3`** | `cat /proc/cmdline` → `root=/dev/sda3 … cswap=/dev/sda2`；`ls /dev/sd*` 有、`/dev/hd*` 不存在 |
+| `constellation-770ed-lcars.img` | 2.2.26 | 老 `drivers/ide`（`CONFIG_BLK_DEV_IDEPCI`） | **`/dev/hda1/2/3`** | 启动打印 `PIIX3: IDE controller …` / `hda: hda1 hda2 hda3`；`ls /dev/sd*` 不存在 |
+
+所以：
+- grub4dos 菜单、`/etc/fstab`、init 的 `cswap=` 参数，**必须跟各自的内核匹配**，
+  不能一张卡两边混用。
+- 主镜像的 `root=`/`cswap=` 由 `scripts/mkimage-770ed.sh` 生成（`sda$ROOT_PART`）；
+  LCARS 的由 `scripts/build-lcars-770ed.sh` 写死在 `menu.lst` 和 `/etc/fstab` 里（`hda3`）。
+- 如果把 CF 卡插在 **PCMCIA 转接卡**上而不是本机 IDE 口，主镜像会变成 `/dev/sdb`
+  （`pata_pcmcia` 挂在 libata 第二组），LCARS 则变成 `/dev/hde` 之类 —— 这时要手改
+  `menu.lst`/`fstab`，或者干脆只在 IDE 口上用。
+
+### 14.1 顺带修掉的 fstab 错误（用户提醒的）
+
+主镜像原来的 `/etc/fstab` 是 `scripts/build-rootfs-770ed.sh` 里一行 printf 生成的，
+根写成了 **`/dev/sda2`——那是 swap 分区**（布局是 p1=boot / p2=swap / p3=root）。
+`mount -a` 会把 swap 分区当根去挂。现在改成真实的布局，并补上 swap、`/boot`、
+`/dev/pts`、`/run`、`/tmp` 条目，同时把缺失的挂载点目录建出来：
+
+```
+/dev/sda3   /        ext4      rw,relatime,errors=remount-ro  0 1
+/dev/sda2   none     swap      sw                             0 0
+/dev/sda1   /boot    vfat      ro,noauto                      0 0
+proc/sysfs/devtmpfs/devpts/tmpfs(/run, /tmp) …
+```
+
+LCARS 侧同理：fstab 用 `hda3/hda2`，并补了 `/hda1`、`/fd` 挂载点目录（上游
+`/etc/rc` 会把 `/dev/hda1` 挂到 `/hda1` 去找 `swap.img`）；`/etc/mtab` 上游做成了
+指向 `/proc/mounts` 的软链，2.2 时代的 `mount` 不跟它，每次报 `can't open
+/etc/mtab`，已改成真实空文件。
+
