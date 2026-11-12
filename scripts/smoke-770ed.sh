@@ -2,7 +2,7 @@
 # 770ED 镜像冒烟验收：真实引导链（BIOS → MBR/GRUB2 → bzImage → ext4 →
 # s6-svscan → getty），登录后跑一组检查并把串口全文打出来。
 #
-# QEMU 没有 440BX/TI1250/Cyber9397DVD/CS4237B 的精确模型，因此这里验的是
+# QEMU 没有 440BX/TI1250/Cyber9397/CS4237B 的精确模型，因此这里验的是
 # "引导链、用户空间、模块装载路径、USB/网卡热插拔"；显卡/声卡/CardBus 的
 # 真机证据要靠目标机上的 hwcheck（见 docs/thinkpad-770ed.md §7.2）。
 #

@@ -59,7 +59,7 @@ make distclean >/dev/null 2>&1 || true
 # 关键：--disable-pango —— Pango 走 glib，而 glib/gtk 系在 PII 上同样会踩
 # Alpine 的 SSE 代码（也是我们不用 icewm 的原因）。JWM 自己的绘制够用。
 ./configure --host=i486-linux-musl --build="$(uname -m)-linux-gnu" \
-  --prefix=/usr --disable-debug --disable-nls --enable-xft --disable-pango \
+  --prefix=/usr --disable-debug --disable-nls --enable-xft --disable-pango --disable-xinerama \
   --x-includes="$STAGE/usr/include" --x-libraries="$STAGE/usr/lib" \
   CC=i486-linux-musl-gcc \
   CPPFLAGS="-I$STAGE/usr/include" \

@@ -1,7 +1,7 @@
 # ThinkPad 770ED 风味
 
 本文档记录 Constellation OS 的 **770ED 风味**：面向 IBM ThinkPad 770ED
-（9548/9549 系列，1998 年，Pentium II 266 / 440BX / Trident Cyber9397DVD /
+（9548/9549 系列，1998 年，Pentium II 266 / 440BX / Trident Cyber9397 /
 CS4237B / TI PCI1250 CardBus）。参考机配置：**64 MiB 内存（32 MiB 板载 +
 32 MiB SO-DIMM）**、8.1 GB IDE 硬盘、14.1" 1024×768 TFT。
 
@@ -33,7 +33,7 @@ IBM PSREF 770ED 概述（LWIK-3TQHC7）。
 | 北桥 | Intel 82443BX（440BX，66 MHz FSB） | PCI 子系统 | ✅ |
 | 南桥 | Intel PIIX4 系列（IDE/USB/APM） | `ATA_PIIX`、`USB_UHCI_HCD`、`APM` | ✅ 内置 |
 | 内存 | 32 MiB 板载 + 64-pin SO-DIMM；288 MiB 可寻址 | `HIGHMEM=n` 足够 | ✅ |
-| 显示 | Trident **Cyber9397DVD**，4 MB SGRAM，PCI `1023:9397` | **`tridentfb`**（模块） | ✅ 面板 1024×768-16 |
+| 显示 | Trident **Cyber9397**，4 MB SGRAM，PCI `1023:9397`（770ED 不带 DVD 版本；770X/770Z 才是 Cyber9397DVD，驱动同一支 `tridentfb`，PCI ID 也相同） | **`tridentfb`**（模块） | ✅ 面板 1024×768-16 |
 | 显卡 X11 | 同上 | Xorg（Alpine x86 21.1.14）+ `fbdev`（帧缓冲）/`vesa`（VBE） | ⚠️ 见 §6.1：Alpine 的 X 服务器在 PII 上会 SIGILL |
 | 音频 | Crystal **CS4237B**（ISA，SB Pro 兼容） | **`snd-cs4236`** + `PNPBIOS`/`ISAPNP`；`snd-mixer-oss` 提供 `/dev/mixer` | ✅ 驱动 + `/bin/mixer` 调主音量（见 §6 的说明） |
 | 猫 | IBM **MWave 3780i** DSP（56K，x2） | **`mwave`**（模块） | ⚠️ 需 BIOS 已分配 DSP 资源；无拨号用户态 |
@@ -87,7 +87,7 @@ README 的主线是"版本就高不就新"，但那句的前提是"上游还愿�
 
 | 能力 | 6.6.162 LTS | 6.18.44 LTS |
 |---|---|---|
-| Trident Cyber9397DVD（`tridentfb`） | ✅ | ✅ |
+| Trident Cyber9397（`tridentfb`） | ✅ | ✅ |
 | CS4237B（`snd-cs4236`）、MWave（`mwave`） | ✅ | ✅ |
 | TI PCI1250 CardBus（`yenta_socket`） | ✅ | ✅ |
 | PIIX4 UHCI USB、APM、ata_piix | ✅ | ✅ |
@@ -401,7 +401,7 @@ XSuSE Trident server）确实有用——**但只有"面板参数"和"老坑"是
 
 ### 7.2 只能在真机上确认的
 
-QEMU 没有 440BX+TI1250+Cyber9397DVD+CS4237B 的精确模型，所以下面这些
+QEMU 没有 440BX+TI1250+Cyber9397+CS4237B 的精确模型，所以下面这些
 必须上机跑一次 `hwcheck` 才算数：
 
 | 项目 | 期望证据 |
@@ -510,4 +510,52 @@ Xorg 有自己的 `xf86-video-trident`（1.4.0）。看起来很香——但 939
 2. NT4 驱动**不入库**（第三方二进制，许可证不明），只在这里记录来源、哈希与
    内容清单；将来真要做 TV-out/覆盖层，从 §11.1 那几个导出函数入手。
 3. EC/SMAPI 是下一步唯一值得投入的逆向/移植对象，前提是拿到真机做实验台。
+
+## 12. SSE 审计：镜像里到底还有没有 SSE 二进制
+
+Pentium II **没有 SSE**（PIII 才有），而 Alpine 的 x86 归档是 PIII 基线。
+所以每引入一个 Alpine 二进制都要问一句"它会不会执行到 `movaps`"。
+为此写了个审计脚本，只统计**真正生效**的文件（解析 soname 软链后的实体库 +
+bin/sbin/libexec 里的可执行文件），只看含 `%xmm/%ymm/%zmm` 操作数的指令：
+
+```sh
+scripts/audit-sse-770ed.sh            # 退出码 0 = 干净
+```
+
+当前结果：
+
+```
+生效的共享库: 59   可执行文件: 158
+✅ 生效集合里没有 xmm/ymm 指令（PII 可安全执行）
+```
+
+### 12.1 审计抓出来的两类问题
+
+**第一类：还在用 Alpine 的 SSE 库**（这个是会真崩的）
+
+| 文件 | 谁在用 | 处理 |
+|---|---|---|
+| `libjpeg.so.8`（Alpine 版） | **JWM**（菜单/背景图） | 自编 libjpeg-turbo 3.0.4（`WITH_SIMD=OFF` + `-DWITH_JPEG8=ON` 保持 soname 8） |
+| `libpng16.so.16`（Alpine 版） | **JWM** | 自编 libpng 1.6.43；并按 SONAME 精确替换（之前软链被 Alpine 的 16.57 抢走过） |
+| `libSM` → `libuuid` | JWM→Xmu→Xt→SM 链 | 自编 libSM 时 `--without-libuuid`；libuuid 直接删（单屏桌面不用 XSMP） |
+| `mcookie` / `xauth` | `xinit` 建 cookie | **去掉 xinit**：`/usr/bin/x` 直接起 Xorg + JWM，本地显示不需要 cookie |
+| `twm`、`xterm`、GL/Mesa/DRI、python3、sqlite、pppd/openssl、libstdc++ 等 | 用不到 | 全部从镜像里删掉（省了 ~15 MB，也让审计结论干净） |
+
+**第二类：我们自己的构建漏了开关**
+
+- autotools 不跟踪 CFLAGS：改了 `-mno-sse` 之后 `make` 仍复用旧 `.o`
+  （症状：`libXinerama` 里还剩 4 条 `movq %xmm0`）。修法：每次 configure 后
+  `make clean`。
+- 现在所有自编目标都显式带 `-mno-sse -mno-sse2 -mno-mmx -mno-3dnow`，
+  libjpeg-turbo 还额外 `-DWITH_SIMD=OFF`。
+- `libjpeg-turbo` 3.x 默认 soname 是 `libjpeg.so.62`；必须 `-DWITH_JPEG8=ON`
+  才能产出 `libjpeg.so.8`，否则 Alpine 那份 `libjpeg.so.8` 会继续生效
+  （就是这个细节让 JWM 一直链着 SSE 版）。
+
+### 12.2 顺手修的 shell 问题
+
+`/usr/bin/x` 里用了 `$((...))`，而这个 busybox 的 ash 没编数学展开，报
+`support for $((arith)) is disabled` 后整条命令失败。两处都改了：脚本里改成
+`for` 循环计数，busybox 打开 `FEATURE_SH_MATH`/`FEATURE_SH_MATH_64`
+（注意符号名不是 `ASH_MATH_SUPPORT`，写错会被 Kconfig 静默丢弃）。
 

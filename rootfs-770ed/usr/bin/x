@@ -1,57 +1,22 @@
 #!/bin/sh
-# 在 VT2 上启动 Xorg + IceWM（VT1 留给 getty 登录）。
+# 在 VT2 上启动 Xorg + JWM（VT1 留给 getty 登录）。
+#
+# 不走 xinit：xinit 会调 mcookie/xauth 建 cookie，而那两个是 Alpine 的
+# Pentium III(SSE) 二进制。本机是本地显示，不需要授权 cookie，直接起服务器
+# 更省依赖也更可靠。
 #
 # 视频驱动二选一：
-#   /dev/fb0 存在 → fbdev（真机走这里：tridentfb 已经把 Cyber9397DVD 设成
-#                          1024x768-16，X 直接在帧缓冲上画）
-#   否则          → vesa （BIOS 的 VBE 3.0 接口；QEMU 里验收走这条路）
-#
-# 输入：没有 udev，所以按 /proc/bus/input/devices 里的 Handlers 找到
-# 键盘与鼠标（TrackPoint 就是 PS/2 AUX）对应的 eventN，写进临时
-# xorg.conf。Xorg 21 的 evdev 驱动只认显式 /dev/input/eventX 路径。
+#   /dev/fb0 存在 → fbdev（真机走这里：tridentfb 已把 9397 设成 1024x768）
+#   否则          → 直接报错退出（QEMU 纯文本引导下没有帧缓冲）
 set -e
 export PATH=/usr/bin:/usr/sbin:/bin:/sbin
+
 CONF=/tmp/xorg.conf
 
-fb_event() {
-  awk -v want="$1" '
-    /^I: Bus=/ { dev=""; kbd=0; mouse=0 }
-    /^N: Name=/ { name=$0; sub(/^N: Name=/, "", name) }
-    /^H: Handlers=/ { h=$0; sub(/^H: Handlers=/, "", h);
-      n=split(h, a, " "); for (i = 1; i <= n; i++) {
-        if (a[i] ~ /^event[0-9]+$/) dev = a[i];
-        if (a[i] == "kbd") kbd = 1;
-        if (a[i] == "mouse") mouse = 1;
-      }
-      if (want == "kbd" && kbd && dev != "") { print dev; exit }
-      if (want == "mouse" && mouse && dev != "") { print dev; exit }
-    }' /proc/bus/input/devices
-}
-
-if [ -e /dev/fb0 ]; then
-  DRIVER=fbdev
-  EXTRA='    Option "fbdev" "/dev/fb0"'
-else
-  DRIVER=vesa
-  EXTRA='    Option "ModeSetClearScreen" "off"'
-fi
-
-KBD=$(fb_event kbd);  [ -n "$KBD" ]   || KBD=event0
-
-# 鼠标设备：/dev/input/mice（mousedev 混合设备）是首选；老配置里常见的
-# /dev/psaux 是同一股数据流的传统别名，只有在 CONFIG_INPUT_MOUSEDEV_PSAUX=y
-# 时才存在（现在本风味已打开）。两者都没有时退回 eventX。
-MOUSE_DEV=/dev/input/mice
-MOUSE_PROTO=IMPS/2
-if [ ! -e /dev/input/mice ]; then
-  if [ -e /dev/psaux ]; then
-    MOUSE_DEV=/dev/psaux
-    MOUSE_PROTO=PS/2
-  else
-    MOUSE=$(fb_event mouse); [ -n "$MOUSE" ] || MOUSE=event1
-    MOUSE_DEV=/dev/input/$MOUSE
-    MOUSE_PROTO=IMPS/2
-  fi
+if [ ! -e /dev/fb0 ]; then
+  echo "x: 没有 /dev/fb0（tridentfb 未加载或加载失败）。"
+  echo "x: 先看 dmesg | grep -i trident；或 modprobe tridentfb 后再试。"
+  exit 1
 fi
 
 cat > "$CONF" <<CONFEOF
@@ -69,15 +34,13 @@ EndSection
 
 Section "Device"
     Identifier "Card0"
-    Driver "$DRIVER"
-$EXTRA
+    Driver "fbdev"
+    Option "fbdev" "/dev/fb0"
 EndSection
 
 Section "Monitor"
     Identifier "Panel"
     # 面板允许的同步范围：取自 1998 年那台 770 上跑 XFree86 的 XF86Config
-    # （HorizSync 31.5-57.0 / VertRefresh 50-100），比"随便写宽一点"更贴近
-    # 实际面板，也让 X 自动剔除它不支持的时序。
     HorizSync   31.5 - 57.0
     VertRefresh 50.0 - 100.0
     Option "DPMS" "false"
@@ -91,20 +54,16 @@ Section "Screen"
     DefaultDepth 16
     SubSection "Display"
         Depth 16
-        # 1024x768 是面板原生分辨率；后面两个是外接 CRT 时用的退路。
         Modes "1024x768" "800x600" "640x480"
     EndSubSection
-    # 24bpp：Trident 自己的 NT4 驱动 README 明确写了"1024x768 32bpp 需要 4 MB"，
-    # 我们正好是 4 MB SGRAM，所以 1024x768x32 是可行的（1024*768*4 = 3 MB）。
-    # 1998 年那份 XF86Config 只写 800x600，是当时 XFree86 3.3 的保守取值。
     SubSection "Display"
         Depth 24
         Modes "1024x768" "800x600" "640x480"
     EndSubSection
 EndSection
 
-# 输入驱动用 kbd + mouse（老式、走 /dev/ttyX 与 /dev/input/mice），
-# 不用 evdev：evdev 硬依赖 libudev，而 eudev 也是 SSE 基线（实测 SIGILL）。
+# 输入用 kbd + mouse（老式、走 /dev/ttyX 与 /dev/input/mice），不用 evdev：
+# evdev 硬依赖 libudev，而 eudev 也是 SSE 基线（实测 SIGILL）。
 Section "InputDevice"
     Identifier "Keyboard0"
     Driver "kbd"
@@ -114,8 +73,8 @@ EndSection
 Section "InputDevice"
     Identifier "Mouse0"
     Driver "mouse"
-    Option "Protocol" "$MOUSE_PROTO"
-    Option "Device" "$MOUSE_DEV"
+    Option "Protocol" "IMPS/2"
+    Option "Device" "/dev/input/mice"
     Option "Emulate3Buttons" "true"
     Option "ZAxisMapping" "4 5"
 EndSection
@@ -123,14 +82,28 @@ CONFEOF
 
 mkdir -p /tmp/.X11-unix /var/log
 chmod 1777 /tmp/.X11-unix 2>/dev/null || true
-# 上一次 X 崩掉留下的锁会让新实例直接报 "Server is already active"。
 rm -f /tmp/.X0-lock /tmp/.X11-unix/X0 2>/dev/null || true
 
-echo "x: driver=$DRIVER kbd=/dev/input/$KBD mouse=$MOUSE_DEV proto=$MOUSE_PROTO"
-# Xorg 21 的权限检查：以 root 运行时 -config 只接受**相对路径**（且不能含
-# ".."），所以先 cd 到 /tmp 再用文件名传参。绝对路径会被拒绝：
-#   "Invalid argument for -config ... must specify a relative path"
+# Xorg 21 的权限检查：以 root 运行时 -config 只接受相对路径
 cd /tmp || exit 1
-xinit /etc/X11/xinit/xinitrc -- /usr/bin/X :0 -config xorg.conf -logfile /tmp/X.log -nolisten tcp vt2
-# X 退出后回到 getty 所在的 VT1
+/usr/bin/Xorg :0 -config xorg.conf -logfile /tmp/X.log -nolisten tcp vt2 &
+XPID=$!
+
+# 等 socket 就绪（最多 10 秒）。注意：不用 $((...))——这个 busybox 的 ash
+# 没编数学展开（CONFIG_ASH_MATH_SUPPORT 关着），一用就报
+# "support for $((arith)) is disabled" 然后整个脚本退出。
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [ -e /tmp/.X11-unix/X0 ] && break
+  sleep 1
+done
+if [ ! -e /tmp/.X11-unix/X0 ]; then
+  echo "x: X 服务器没起来，见 /tmp/X.log"
+  exit 1
+fi
+
+export DISPLAY=:0
+/usr/bin/jwm -f /etc/jwm/jwmrc
+
+# JWM 退出 → 收掉服务器，回到 getty 所在的 VT1
+kill "$XPID" 2>/dev/null || true
 chvt 1 2>/dev/null || true

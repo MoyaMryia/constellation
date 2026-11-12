@@ -30,3 +30,9 @@ CONFIG_MODINFO=y
 CONFIG_DMESG=y
 # X 在 VT2 上跑，退出后切回 VT1 上的 getty。
 CONFIG_CHVT=y
+# ash 内的 $(( )) 数学展开：脚本里写计数器/位移时很常见。没开的话报
+# "support for $((arith)) is disabled" 并让整条命令失败（/usr/bin/x 就中过）。
+# 正确的符号名是 FEATURE_SH_MATH（不是 ASH_MATH_SUPPORT——那个名字写错会
+# 被 Kconfig 静默丢掉，症状就是 "$((arith)) is disabled"）。
+CONFIG_FEATURE_SH_MATH=y
+CONFIG_FEATURE_SH_MATH_64=y

@@ -1,0 +1,4 @@
+# Apply this fragment to 6.18.44-L4.config for the legacy486 kernel flavor.
+CONFIG_M486=y
+# CONFIG_M586TSC is not set
+CONFIG_MATH_EMULATION=y

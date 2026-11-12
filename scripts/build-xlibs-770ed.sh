@@ -22,6 +22,10 @@ JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}
 ALPINE_VER=${ALPINE_VER:-3.20}
 
 mkdir -p "$SRCROOT" "$STAGE"
+# 用来区分"我们刚编出来的"和"Alpine 的 -dev 包带进来的同名库"。
+# 后面的安装步骤只复制比这个标记新的文件——否则 Alpine 那份同 soname 的
+# SSE 库会被一起拷进 rootfs，还可能按字母序赢下软链（libpng 就这么中过）。
+MARK=$(mktemp /tmp/xlibs-mark.XXXXXX)
 [ -x "$CC_WRAP" ] || { echo "缺少工具链：先跑 scripts/build-core-770ed.sh" >&2; exit 1; }
 
 # TODO(pin): 这里沿用了最早的写法——只下载不钉哈希。下一步应当像
@@ -71,7 +75,7 @@ pkgconfig = '/usr/bin/pkg-config'
 needs_exe_wrapper = true
 sys_root = '$STAGE'
 [built-in options]
-c_args = ['-Os', '-march=i486', '-fno-stack-protector', '-I$STAGE/usr/include', '-Wno-error=array-bounds']
+c_args = ['-Os', '-O2', '-march=i486', '-mno-sse', '-mno-sse2', '-mno-mmx', '-mno-3dnow', '-fno-stack-protector', '-I$STAGE/usr/include', '-Wno-error=array-bounds']
 c_link_args = ['-L$STAGE/usr/lib', '-L$STAGE/lib', '-Wl,-rpath-link,$STAGE/usr/lib', '-Wl,-rpath-link,$STAGE/lib']
 [host_machine]
 system = 'linux'
@@ -102,8 +106,13 @@ build_auto () {
     env -u PKG_CONFIG_PATH xorg_cv_malloc0_returns_null=no \
       ./configure --host=i486-linux-musl --build="$(uname -m)-linux-gnu" \
       --prefix=/usr --disable-malloc0returnsnull CC=i486-linux-musl-gcc \
-      CFLAGS="-Os -march=i486 -fno-stack-protector" CPPFLAGS="-I$STAGE/usr/include" \
-      LDFLAGS="-L$STAGE/usr/lib -L$STAGE/lib -Wl,-rpath-link,$STAGE/usr/lib -Wl,-rpath-link,$STAGE/lib" >/dev/null && \
+      CFLAGS="-Os -O2 -march=i486 -mno-sse -mno-sse2 -mno-mmx -mno-3dnow -fno-stack-protector" CPPFLAGS="-I$STAGE/usr/include" \
+      LDFLAGS="-L$STAGE/usr/lib -L$STAGE/lib -Wl,-rpath-link,$STAGE/usr/lib -Wl,-rpath-link,$STAGE/lib" \
+      "$@" >/dev/null && \
+    # make clean 是必须的：CFLAGS 变了 make 自己不会察觉（autotools 不跟踪
+    # 编译选项），会复用上一轮的 .o —— 症状就是"明明加了 -mno-sse，
+    # libXinerama 里还剩 4 条 movq %xmm"。
+    make clean >/dev/null 2>&1 || true
     make -j"$JOBS" >/dev/null && make install DESTDIR="$STAGE" >/dev/null )
   # .la 里记的是宿主的绝对路径（/usr/lib/xxx.la），后续包用 libtool 链接时
   # 会去读它并失败（"is not a valid libtool archive"）。删掉即可，libtool
@@ -159,7 +168,7 @@ build_libxcb () {
     env -u PKG_CONFIG_PATH PKG_CONFIG_LIBDIR="$STAGE/usr/lib/pkgconfig:$STAGE/usr/share/pkgconfig" \
       PKG_CONFIG_SYSROOT_DIR="$STAGE" PYTHONPATH="$py/site-packages" \
       ./configure --host=i486-linux-musl --build="$(uname -m)-linux-gnu" --prefix=/usr \
-        CC=i486-linux-musl-gcc CFLAGS="-Os -march=i486 -fno-stack-protector" \
+        CC=i486-linux-musl-gcc CFLAGS="-Os -O2 -march=i486 -mno-sse -mno-sse2 -mno-mmx -mno-3dnow -fno-stack-protector" \
         CPPFLAGS="-I$STAGE/usr/include" \
         LDFLAGS="-L$STAGE/usr/lib -L$STAGE/lib -Wl,-rpath-link,$STAGE/usr/lib -Wl,-rpath-link,$STAGE/lib" \
         --disable-devel-docs >/dev/null && \
@@ -177,10 +186,11 @@ build_libX11 () {
     env -u PKG_CONFIG_PATH PKG_CONFIG_LIBDIR="$STAGE/usr/lib/pkgconfig:$STAGE/usr/share/pkgconfig" \
       PKG_CONFIG_SYSROOT_DIR="$STAGE" \
       ./configure --host=i486-linux-musl --build="$(uname -m)-linux-gnu" --prefix=/usr \
-        CC=i486-linux-musl-gcc CFLAGS="-Os -march=i486 -fno-stack-protector" \
+        CC=i486-linux-musl-gcc CFLAGS="-Os -O2 -march=i486 -mno-sse -mno-sse2 -mno-mmx -mno-3dnow -fno-stack-protector" \
         CPPFLAGS="-I$STAGE/usr/include" \
         LDFLAGS="-L$STAGE/usr/lib -L$STAGE/lib -Wl,-rpath-link,$STAGE/usr/lib -Wl,-rpath-link,$STAGE/lib" \
         --disable-malloc0returnsnull >/dev/null && \
+    make clean >/dev/null 2>&1 && \
     make -j"$JOBS" >/dev/null && make install DESTDIR="$STAGE" >/dev/null )
   rm -f "$STAGE"/usr/lib/*.la
   echo "xl: libX11 完成"
@@ -196,10 +206,34 @@ build_meson freetype      https://download.savannah.gnu.org/releases/freetype/fr
 build_meson fontconfig    https://www.freedesktop.org/software/fontconfig/release/fontconfig-2.15.0.tar.xz \
              -Ddoc=disabled -Dtests=disabled -Dtools=disabled
 
+# ---- 图像库：JWM 直接链接 jpeg/png（图标、背景），Alpine 版是 SSE 基线 ----
+build_jpeg () {
+  fetch https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.0.4/libjpeg-turbo-3.0.4.tar.gz
+  dir=$SRCROOT/libjpeg-turbo-3.0.4
+  [ -d "$dir" ] || tar -C "$SRCROOT" -xf "$SRCROOT/libjpeg-turbo-3.0.4.tar.gz"
+  rm -rf "$dir/build"
+  # -DWITH_SIMD=OFF：SIMD 路径由 nasm 汇编生成，那条路在 i486 上没有可用实现，
+  # 关掉后是纯 C（也给 PII 省下不必要的解码开销）。
+  cmake -S "$dir" -B "$dir/build" -DCMAKE_SYSTEM_NAME=Linux \
+    -DCMAKE_SYSTEM_PROCESSOR=i486 \
+    -DCMAKE_C_COMPILER=$CC_WRAP -DCMAKE_INSTALL_PREFIX=/usr \
+    -DENABLE_SHARED=ON -DENABLE_STATIC=OFF -DWITH_SIMD=OFF -DWITH_TURBOJPEG=OFF \
+    -DWITH_JPEG8=ON \
+    -DCMAKE_C_FLAGS="-Os -O2 -march=i486 -mno-sse -mno-sse2 -mno-mmx -mno-3dnow -fno-stack-protector" \
+    -DCMAKE_SHARED_LINKER_FLAGS="-L$STAGE/usr/lib -L$STAGE/lib" >/dev/null
+  cmake --build "$dir/build" -j"$JOBS" >/dev/null
+  DESTDIR="$STAGE" cmake --install "$dir/build" >/dev/null
+  echo "xl: libjpeg-turbo 完成"
+}
+build_jpeg
+build_auto  libpng16      https://download.sourceforge.net/libpng/libpng-1.6.43.tar.xz
+
 # ---- 客户端用到的 X 库（xterm/xrdb 走这些；同样必须 i486） ----
 # 顺序：ICE/SM → Xt → Xmu → Xpm → Xext/Xrender → Xft → Xaw
 build_auto  libICE        https://www.x.org/releases/individual/lib/libICE-1.1.1.tar.xz
-build_auto  libSM         https://www.x.org/releases/individual/lib/libSM-1.2.4.tar.xz
+# libSM 默认会链 libuuid（Alpine 版是 SSE 基线）。JWM 单屏桌面根本不用
+# XSMP 会话管理，所以我们显式关掉 libuuid 支持：少一个依赖、少一个 SSE 源。
+build_auto  libSM         https://www.x.org/releases/individual/lib/libSM-1.2.4.tar.xz --without-libuuid
 build_auto  libXt         https://www.x.org/releases/individual/lib/libXt-1.3.1.tar.xz
 build_auto  libXmu        https://www.x.org/releases/individual/lib/libXmu-1.2.1.tar.xz
 build_auto  libXpm        https://www.x.org/releases/individual/lib/libXpm-3.5.17.tar.xz
@@ -210,37 +244,38 @@ build_auto  libXaw        https://www.x.org/releases/individual/lib/libXaw-1.0.1
 # libtool 的 .la 会记住宿主的 /usr/lib 绝对路径，先清掉再给后续包用
 rm -f "$STAGE"/usr/lib/*.la
 
-# ---- 装进 rootfs（同 soname 覆盖 Alpine 的那份） ----
+# ---- 装进 rootfs（按 SONAME 精确替换） ----
+# 关键：staging 里同时存在"我们刚编的"和"Alpine -dev 包带进来的"同名库
+# （同一个 SONAME、不同文件名，例如 libpng16.so.16.43 与 .16.57）。
+# 只认比 MARK 新的**实体文件**（-type f），逐个用 readelf 取 SONAME，
+# 再把 rootfs 里同 SONAME 的其它实体文件删掉后建立软链。
 if [ "${OUTSIDE:-0}" != 1 ]; then
-  for f in "$STAGE"/usr/lib/*.so.*; do
-    [ -e "$f" ] || continue
-    base=${f##*/}
-    # 装到与原库相同的目录：Alpine 的 zlib 在 /lib，而 musl 的搜索顺序是
-    # /lib:/usr/local/lib:/usr/lib——只放 /usr/lib 会被 /lib 的老版本盖掉
-    # （症状：明明换成了 i486 版本，Xorg 还是死在同一偏移）。
-    if [ -e "$DEST/lib/$base" ] || [ -e "$DEST/lib/${base%%.so.*}.so.${base##*.so.}" ]; then
-      cp -a "$f" "$DEST/lib/$base"
-    else
-      cp -a "$f" "$DEST/usr/lib/$base"
-    fi
+  n=0
+  for dir in "$STAGE/usr/lib" "$STAGE/lib"; do
+    [ -d "$dir" ] || continue
+    for f in $(find "$dir" -maxdepth 1 -type f -name '*.so.*' -newer "$MARK" | sort); do
+      soname=$(readelf -d "$f" 2>/dev/null | sed -n 's/.*SONAME.*\[\(.*\)\]/\1/p')
+      [ -n "$soname" ] || continue
+      base=${f##*/}
+      # 装到与原库同级的目录：/lib 里的（zlib）必须留在 /lib，因为 musl 的
+      # 搜索顺序是 /lib:/usr/local/lib:/usr/lib
+      if [ -n "$(find "$STAGE/lib" -maxdepth 1 -name "$base" 2>/dev/null)" ]; then
+        outdir=$DEST/lib
+      else
+        outdir=$DEST/usr/lib
+      fi
+      mkdir -p "$outdir"
+      cp -a "$f" "$outdir/$base"
+      for old in "$outdir/$soname".* "$outdir/$soname"; do
+        [ -e "$old" ] || continue
+        [ "$(basename "$old")" = "$base" ] && continue
+        rm -f "$old"
+      done
+      ln -sf "$base" "$outdir/$soname"
+      n=$((n+1))
+    done
   done
-  # 重建 soname 软链（libfoo.so.N -> libfoo.so.N.M.K）
-  for f in "$STAGE"/usr/lib/*.so.*; do
-    [ -e "$f" ] || continue
-    base=${f##*/}
-    case $base in
-      *.so )
-        soname=$(readelf -d "$f" | sed -n 's/.*SONAME.*\[\(.*\)\]/\1/p')
-        printf 'xl: soname 链接 %s -> %s\n' "$soname" "$base"
-        ;;
-      *.so.*.*)
-        lib=${base%%.so.*}.so
-        major=$(printf '%s' "$base" | sed 's/.*\.so\.\([0-9]*\).*/\1/')
-        ln -sf "$base" "$DEST/usr/lib/$lib.$major"
-        ln -sf "$base" "$DEST/usr/lib/$lib"
-        ;;
-    esac
-  done
+  echo "xl: 安装自编库 $n 个（按 SONAME 替换 Alpine 版）"
 fi
 
 echo "xl: 目标 $DEST"
@@ -249,6 +284,7 @@ for so in libz.so.1 libpixman-1.so.0 libpciaccess.so.0 libXau.so.6 libXdmcp.so.6
           libXfont2.so.2 libfontenc.so.1 libmd.so.0 libxcvt.so.0 \
           libxcb.so.1 libX11.so.6 libxkbfile.so.1 \
           libexpat.so.1 libfreetype.so.6 libfontconfig.so.1 \
+          libjpeg.so.8 libpng16.so.16 \
           libICE.so.6 libSM.so.6 libXt.so.6 libXmu.so.6 libXmuu.so.1 \
           libXpm.so.4 libXext.so.6 libXrender.so.1 libXft.so.2 libXaw.so.7; do
   f=$(ls "$DEST"/usr/lib/$so* 2>/dev/null | head -1)

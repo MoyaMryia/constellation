@@ -2,7 +2,7 @@
 #
 # 基线：kernel/configs/6.18.44-L4.config（tinyconfig 加法线，i386）。
 # 参考机型：PII 266（Deschutes，MMX）、Intel 440BX + PIIX4、
-#   Trident Cyber9397DVD（PCI 1023:9397）、CS4237B（ISA/PnP）、
+#   Trident Cyber9397（PCI 1023:9397）、CS4237B（ISA/PnP）、
 #   MWave 3780i DSP 调制解调器、TI PCI1250 CardBus（104c:ac16）、
 #   PIIX4 UHCI USB、IrDA 1.1（见 docs/thinkpad-770ed.md §6 缺失项）。
 #
@@ -63,7 +63,7 @@ CONFIG_ZISOFS=y
 CONFIG_UDF_FS=m
 
 # ---------------------------------------------------------------- 图形
-# Trident Cyber9397DVD：内核侧只有 tridentfb。做成模块，好让
+# Trident Cyber9397：内核侧只有 tridentfb。做成模块，好让
 # /etc/modprobe.d/tridentfb.conf 里的面板参数（fp/1024x768-16）生效，
 # 并且不和早期 VGA 文本控制台抢设备。
 CONFIG_FB_TRIDENT=m

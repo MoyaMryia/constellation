@@ -93,6 +93,79 @@ if [ "$INSTALL_X" = 1 ]; then
     xrdb xmodmap xsetroot xrandr setxkbmap \
     ppp ppp-chat >/dev/null
 
+  # ---- 清理不需要的 Alpine 组件 ----
+  # Alpine 的 x86 包是 Pentium III(SSE) 基线。凡是"镜像里根本用不到"的
+  # 组件一律删掉：既省 30 MB，也让 scripts/audit-sse-770ed.sh 的结论干净。
+  # 保留的是：我们自编的 X 栈、kbd/mouse 输入、JWM、st、以及基础系统。
+  PURGE="
+    usr/lib/python3.12 usr/lib/libpython3.12.so.1.0 usr/lib/libpython3.12.so
+    usr/bin/python3 usr/bin/python3.12 usr/bin/pydoc3 usr/bin/python3-config
+    usr/lib/libsqlite3.so.0.8.6 usr/lib/libsqlite3.so.0 usr/lib/libsqlite3.so
+    usr/lib/mesa usr/lib/libGL.so.1.2.0 usr/lib/libGL.so.1 usr/lib/libGLX.so
+    usr/lib/libEGL.so.1.0.0 usr/lib/libEGL.so.1 usr/lib/libGLESv2.so
+    usr/lib/libgbm.so.1.0.0 usr/lib/libgbm.so.1 usr/lib/libglapi.so.0
+    usr/lib/libepoxy.so.0.0.0 usr/lib/libepoxy.so.0
+    usr/lib/libdrm.so.2.4.0 usr/lib/libdrm.so.2 usr/lib/libdrm_intel.so.1.0.0
+    usr/lib/libdrm_intel.so.1 usr/lib/libdrm_amdgpu.so.1.0.0 usr/lib/libdrm_amdgpu.so.1
+    usr/lib/libdrm_radeon.so.1.0.1 usr/lib/libdrm_radeon.so.1 usr/lib/libdrm_nouveau.so.2.0.0
+    usr/lib/libdrm_freedreno.so.1.0.0 usr/lib/libdrm_etnaviv.so.1.0.0
+    usr/lib/libdrm_exynos.so.1.0.0 usr/lib/libdrm_omap.so.1.0.0
+    usr/lib/libdrm_tegra.so.0.0.0 usr/lib/libdrm_tegra.so.0
+    usr/lib/xorg/modules/libglamoregl.so usr/lib/xorg/modules/extensions/libglx.so
+    usr/lib/libstdc++.so.6.0.32 usr/lib/libstdc++.so.6
+    usr/lib/libgcc_s.so.1
+    usr/lib/libncursesw.so.6.4 usr/lib/libncursesw.so.6 usr/lib/libncurses.so.6
+    usr/lib/libgmp.so.10.5.0 usr/lib/libgmp.so.10
+    usr/lib/libnettle.so.8.11 usr/lib/libnettle.so.8 usr/lib/libhogweed.so.6.11
+    usr/lib/libhogweed.so.6
+    usr/lib/libbz2.so.1.0.8 usr/lib/libbz2.so.1
+    usr/lib/liblzma.so.5.8.3 usr/lib/liblzma.so.5
+    usr/lib/libreadline.so.8.2 usr/lib/libreadline.so.8
+    usr/lib/libpkgconf.so.5.0.0 usr/lib/libpkgconf.so.5 usr/bin/pkgconf usr/bin/pkg-config
+    usr/lib/libwayland-server.so.0.22.0 usr/lib/libwayland-server.so.0
+    usr/lib/libwayland-client.so.0.22.0 usr/lib/libwayland-client.so.0
+    usr/lib/libgdbm.so.6.0.0 usr/lib/libgdbm.so.6 usr/lib/libgdbm_compat.so.4.0.0
+    usr/lib/libgdbm_compat.so.4 usr/lib/libmpdec.so.4.0.0 usr/lib/libmpdec.so.4
+    usr/lib/libmpdec++.so.4.0.0 usr/lib/libmpdec++.so.4
+    usr/lib/libbsd.so.0.12.2 usr/lib/libbsd.so.0 usr/lib/libffi.so.8.1.4 usr/lib/libffi.so.8
+    usr/lib/libudev.so.1.6.3 usr/lib/libudev.so.1 usr/lib/libevdev.so.2.3.0 usr/lib/libevdev.so.2
+    usr/lib/libmtdev.so.1.0.0 usr/lib/libmtdev.so.1 usr/lib/libeconf.so.0.6.2 usr/lib/libeconf.so.0
+    usr/lib/libpcap.so.1.10.4 usr/lib/libpcap.so.1
+    usr/lib/libcrypto.so.3 usr/lib/libssl.so.3 usr/lib/libcrypto.so.1.1
+    usr/lib/engines-3 usr/lib/ossl-modules
+    usr/sbin/pppd usr/sbin/pppstats usr/sbin/pppdump usr/sbin/pppoe-discovery usr/lib/pppd
+    usr/bin/pppd
+    usr/bin/xterm usr/bin/xrdb usr/bin/xsetroot usr/bin/xrandr usr/bin/setxkbmap
+    usr/bin/cvt usr/bin/gtf usr/bin/sxpm usr/bin/bomtool usr/bin/resize
+    usr/bin/mkfontscale usr/bin/mkfontdir usr/bin/bdftopcf usr/bin/ucs2any
+    usr/bin/xkbprint usr/bin/xkbvleds usr/bin/xkbwatch usr/bin/xkbbell
+    usr/libexec/Xorg usr/libexec/Xorg.wrap usr/libexec/Xorg.wrap.real
+    usr/lib/xorg/modules/input/evdev_drv.so usr/lib/xorg/modules/input/inputtest_drv.so
+    usr/lib/xorg/modules/drivers/vesa_drv.so usr/lib/xorg/modules/drivers/modesetting_drv.so
+    usr/lib/xorg/modules/libvgahw.so usr/lib/xorg/modules/libshadow.so
+    usr/lib/libXxf86vm.so.1.0.0 usr/lib/libXxf86vm.so.1
+    usr/lib/libXrandr.so.2.2.0 usr/lib/libXrandr.so.2
+    usr/lib/libXcursor.so.1.0.2 usr/lib/libXcursor.so.1
+    usr/lib/libwayland-server.so.0 usr/lib/libdrm.so
+    usr/lib/libuuid.so.1.3.0 usr/lib/libblkid.so.1.1.0 usr/lib/libmount.so.1.1.0
+    usr/lib/libcom_err.so.2.1 usr/lib/libkeyutils.so.1.10 usr/lib/libkrb5support.so.0.1
+    usr/lib/libtirpc.so.3 usr/lib/libgssapi_krb5.so.2 usr/lib/libkrb5.so.3
+    usr/lib/libk5crypto.so.3 usr/lib/libkmod.so.2 usr/lib/libcap.so.2
+    usr/lib/libacl.so.1 usr/lib/libattr.so.1
+    usr/lib/libbrotlienc.so.1.1.0 usr/lib/libbrotlienc.so.1
+    usr/lib/libbrotlidec.so.1.1.0 usr/lib/libbrotlidec.so.1
+    usr/lib/libbrotlicommon.so.1.1.0 usr/lib/libbrotlicommon.so.1
+    usr/lib/libxshmfence.so.1.0.0 usr/lib/libxshmfence.so.1
+    lib/libudev.so.1.6.3 lib/libudev.so.1 lib/libuuid.so.1.3.0 lib/libuuid.so.1
+    usr/lib/libXfixes.so.3.1.0 usr/lib/libXfixes.so.3
+    usr/lib/libXinerama.so.1.0.0 usr/lib/libXinerama.so.1
+    usr/bin/twm usr/bin/xauth usr/bin/mcookie usr/bin/xinit
+    usr/lib/libXau.so.6 usr/lib/libXdmcp.so.6
+  "
+  for f in $PURGE; do
+    rm -rf "$DEST/$f"
+  done
+
   # ---- 自编 i486 的 X 栈 ----
   # Alpine 的 x86 归档是 Pentium III(SSE) 基线：Xorg、libz、libX11、libXt …
   # 在 770ED 的 Pentium II 上会 SIGILL。三个脚本分别负责：

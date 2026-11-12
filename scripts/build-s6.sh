@@ -9,6 +9,7 @@ BUILD_DIR=${M2_BUILD_DIR:-/tmp/m2src}
 INSTALL_DIR=${M2_INSTALL_DIR:-$ROOT/build/m2root}
 PREFIX=$INSTALL_DIR/usr
 CC_WRAP=$ROOT/toolchain/musl-i486/bin/i486-linux-musl-gcc
+JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf '%s\n' 1)}
 
 # skarnet current stable as of 2026-08
 SKALIBS=skalibs-2.15.1.0
@@ -23,15 +24,29 @@ S6RC_SHA=bf5b8ce0da5a4ee70d642b818b61d9916a7a9b64a457595f388113e54a188688
 # Cross-compile sysdeps that cannot be autodetected for i486-musl.
 SYSDEPS="--with-sysdep-devurandom=yes --with-sysdep-posixspawnearlyreturn=no --with-sysdep-procselfexe=/proc/self/exe --with-sysdep-selectinfinite=yes"
 
-mkdir -p "$BUILD_DIR" "$INSTALL_DIR"
+mkdir -p "$BUILD_DIR"
+[ -x "$CC_WRAP" ] || { echo "missing cross compiler: $CC_WRAP" >&2; exit 1; }
 
 download_and_verify () {
   pkg=$1; sha=$2; url=$3
   tarball="$BUILD_DIR/$pkg.tar.gz"
-  if [ ! -f "$tarball" ]; then
-    curl -sS -o "$tarball" "$url"
+  if [ -f "$tarball" ] && ! echo "$sha  $tarball" | sha256sum -c - >/dev/null 2>&1; then
+    rm -f "$tarball"
   fi
-  echo "$sha  $tarball" | sha256sum -c -
+  if [ ! -f "$tarball" ]; then
+    tmp="$tarball.tmp.$$"
+    trap 'rm -f "$tmp"' EXIT HUP INT TERM
+    curl --fail --location --retry 4 --retry-delay 2 --retry-all-errors \
+      --proto '=https' --silent --show-error -o "$tmp" "$url"
+    echo "$sha  $tmp" | sha256sum -c -
+    mv "$tmp" "$tarball"
+    trap - EXIT HUP INT TERM
+  fi
+  if ! echo "$sha  $tarball" | sha256sum -c -; then
+    rm -f "$tarball"
+    echo "removed corrupt download: $tarball" >&2
+    exit 1
+  fi
 }
 
 # download + unpack
@@ -43,8 +58,12 @@ for spec in \
 do
   set -- $spec
   download_and_verify "$1" "$2" "$3"
+  rm -rf "$BUILD_DIR/$1"
   tar -C "$BUILD_DIR" -xf "$BUILD_DIR/$1.tar.gz"
 done
+
+rm -rf "$INSTALL_DIR"
+mkdir -p "$PREFIX"
 
 build_pkg () {
   pkg=$1
@@ -55,7 +74,7 @@ build_pkg () {
     --with-lib="$PREFIX/lib" \
     --disable-shared --enable-static-libc \
     $SYSDEPS
-  make -j16
+  make -j"$JOBS"
   make install
 }
 
@@ -65,5 +84,5 @@ build_pkg "$S6"
 build_pkg "$S6RC"
 
 # Static binaries strip
-find "$PREFIX/bin" -type f -exec "$ROOT/toolchain/musl-i486/bin/i486-linux-musl-strip" {} + 2>/dev/null || true
+find "$PREFIX/bin" -type f -exec "$ROOT/toolchain/musl-i486/bin/i486-linux-musl-strip" {} +
 echo "s6 stack installed under $PREFIX"

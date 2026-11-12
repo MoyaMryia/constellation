@@ -7,7 +7,7 @@
 # 770ED 与 X61 风味的三点差别：
 #   1) 没有 ACPI，只有 APM 1.2：/proc/apm 由内核 APM 驱动提供，休眠/挂起
 #      由 BIOS 主导，用户空间不需要常驻守护进程。
-#   2) 显示器是 Trident Cyber9397DVD，fb 驱动是模块（tridentfb）：必须在
+#   2) 显示器是 Trident Cyber9397，fb 驱动是模块（tridentfb）：必须在
 #      getty 之前加载，否则 tty1 会停在 VGA 文本 80x25 直到有人 modprobe。
 #   3) 声卡是 ISA PnP 的 CS4237B，同样按模块加载；加载失败不影响启动
 #      （有的机器 BIOS 把音频关了，或资源被 Cat 的 DSP 占着）。
