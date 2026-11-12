@@ -199,6 +199,20 @@ if [ "$INSTALL_X" = 1 ]; then
     --path 'lib/firmware/regulatory.db' --path 'lib/firmware/regulatory.db.p7s' \
     wireless-regdb >/dev/null
 
+  # b43 固件（Broadcom BCM43xx）：来自 vendor 驱动 wl_apsta.o 经 b43-fwcutter 提取，
+  # 源与生成命令见 rootfs-770ed/lib/firmware/b43/SOURCE.txt。
+  # BCM4318（Buffalo WLI-CB-AMG54HP 之类）用 ucode5 + pcm5 + b0g0{,bs}initvals5。
+  if [ -d "$TMPL/lib/firmware/b43" ]; then
+    mkdir -p "$DEST/lib/firmware/b43"
+    cp -a "$TMPL/lib/firmware/b43/." "$DEST/lib/firmware/b43/"
+  fi
+
+  # 无线工具：iwconfig/iwlist（wireless-tools）+ wpa_supplicant（wext + internal TLS），
+  # 都用本工程 i486 musl 工具链编（Alpine 的是 SSE 基线）。
+  if [ "${SKIP_WIRELESS:-0}" != 1 ]; then
+    ROOTFS_DEST="$DEST" JOBS="${JOBS:-4}" "$ROOT/scripts/build-wireless-770ed.sh" >/dev/null
+  fi
+
   # 核心字体的 fonts.dir：Alpine 的这些包只在 post-install 里生成，
   # 我们不执行 post-install，于是用包里自带的 mkfontscale 在宿主上跑一遍
   # （用 Alpine 自己的 musl 加载器，不需要 root/chroot）。

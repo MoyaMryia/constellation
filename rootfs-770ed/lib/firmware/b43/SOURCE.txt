@@ -1,0 +1,18 @@
+b43 固件（Broadcom BCM43xx 的 ucode / PCM / initvals）
+
+来源与生成方式（可复现）：
+  vendor : sources.openwrt.org/broadcom-wl-5.100.138.tar.bz2
+           → broadcom-wl-5.100.138/linux/wl_apsta.o
+  cutter : github.com/mbuesch/b43-tools  (b43-fwcutter version 021)
+  命令   : b43-fwcutter -w /tmp/fwout wl_apsta.o
+
+生成 117 个 .fw 文件（约 1.1 MiB），覆盖 b43 支持的全部 PHY：
+  G-PHY  (802.11b/g, BCM4306 rev3 / BCM4311 / BCM4318 等)
+  N-PHY / LP-PHY / HT-PHY / LCN / AC（较新的卡）
+
+BCM4318（14e4:4318，如 BUFFALO WLI-CB-AMG54HP）实际用到的四个：
+  ucode5.fw  pcm5.fw  b0g0initvals5.fw  b0g0bsinitvals5.fw
+（core rev 13 的 4318 变体则是 ucode13 + b0g0initvals13 + b0g0bsinitvals13）
+
+许可：这些是 Broadcom 二进制固件（不是开源的 b43-open ucode），按本项目
+"允许打包闭源/固件"的原则随镜像分发；文件内容未做任何修改。

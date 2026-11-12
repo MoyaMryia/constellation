@@ -729,3 +729,68 @@ LCARS 侧同理：fstab 用 `hda3/hda2`，并补了 `/hda1`、`/fd` 挂载点目
 指向 `/proc/mounts` 的软链，2.2 时代的 `mount` 不跟它，每次报 `can't open
 /etc/mtab`，已改成真实空文件。
 
+## 15. CardBus 无线：BCM4318（BUFFALO WLI-CB-AMG54HP）
+
+用户手上这张卡：**BUFFALO WLI-CB-AMG54HP**，芯片 **Broadcom BCM4318**
+（`14e4:4318`，lspci 报 `BCM4318 [AirForce 54g] 802.11a/b/g`，radio 是 BCM2050
+一系的集成方案）。b43 支持，**有戏**——上游 b43 的设备表里 4318 是双频条目
+（`b43/main.c` 里 `case 0x4319: /* BCM4318 */` → `have_2ghz_phy = have_5ghz_phy = true`）。
+
+佐证：日文博客 jl7gmn 那篇（Ubuntu 12.04 + 同一张卡）最后是靠
+`b43-fwcutter` + `firmware-b43-installer` 点亮的，`iwconfig` 能看到 wlan0 关联。
+
+### 15.1 我们做了什么
+
+1. **固件**（`/lib/firmware/b43/`，117 个 `.fw`，约 1.1 MiB）
+   - 来源：`sources.openwrt.org/broadcom-wl-5.100.138.tar.bz2` 里的
+     `linux/wl_apsta.o`，用 `b43-fwcutter`（b43-tools，version 021）提取
+   - BCM4318 实际用四个：`ucode5.fw` `pcm5.fw` `b0g0initvals5.fw`
+     `b0g0bsinitvals5.fw`（core rev 13 的变体是 `ucode13` + `b0g0initvals13`
+     + `b0g0bsinitvals13`）
+   - 整套都留着，换任何 BCM43xx 卡都不用重打；来源与生成命令记在
+     `rootfs-770ed/lib/firmware/b43/SOURCE.txt`
+2. **内核侧**（本来就有，无需改配置）：`ssb` / `b43` / `mac80211` / `cfg80211`
+   都是模块，`modules.alias` 里 `14e4:4318 → ssb → b43`，mdev 热插拔自动加载
+3. **用户态工具**（新脚本 `scripts/build-wireless-770ed.sh`，i486 + musl 自编）
+   - `wireless-tools` 30~pre9：`iwconfig` / `iwlist` / `iwgetid` / `iwspy` / `iwevent`
+   - `wpa_supplicant` 2.10：**wext 驱动 + internal TLS**（不依赖 libnl / OpenSSL），
+     strip 后 636 KiB；配置模板在 `/etc/wpa_supplicant/wpa_supplicant.conf`
+   - 为什么自编：Alpine 的 x86 归档是 SSE 基线，PII 上会 SIGILL。审计后
+     `xmm/ymm` 计数仍为 0（§12）
+
+### 15.2 用法
+
+```sh
+# 开放或 WEP
+iwconfig wlan0 essid YOUR_SSID key s:yourkey
+udhcpc -i wlan0
+
+# WPA/WPA2-PSK（推荐）
+vi /etc/wpa_supplicant/wpa_supplicant.conf     # 改 ssid/psk
+wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant/wpa_supplicant.conf
+udhcpc -i wlan0
+
+iwconfig wlan0                                  # 看关联状态与速率
+```
+
+### 15.3 边界
+
+| 项 | 状态 |
+|---|---|
+| 2.4 GHz b/g | ✅ 这是 b43 的 G-PHY 主力路径 |
+| 5 GHz / 802.11a | ⚠️ SPROM 标了双频，但 b43 的 A-PHY 支持有限，实际基本用不上 |
+| WPA2-PSK | ✅（wext + internal TLS）；WPA3/SAE 没编 |
+| nl80211 驱动 | ❌ 没编（要 libnl-3/libnl-genl，多一条依赖链）；靠 `CONFIG_CFG80211_WEXT` 兼容层 |
+| 内存 | b43 + mac80211 常驻约几 MiB；64 MiB 机器上建议先起网络再开 X |
+| 真机 | ⏳ 未验（QEMU 只能验证模块加载、固件路径、工具可运行） |
+
+实测（QEMU，无卡）：
+```
+# modprobe b43
+Broadcom 43xx driver loaded [ Features: PN ]
+# wpa_supplicant -v
+wpa_supplicant v2.10
+# ls /lib/firmware/b43 | wc -l
+118
+```
+
