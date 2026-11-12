@@ -71,6 +71,18 @@ if objdump -d src/jwm | grep -qE 'movaps|movdqa|pxor'; then
   exit 1
 fi
 
+# 依赖自检：JWM 动态链接的每个 .so 都必须在目标 rootfs 里存在，
+# 否则要到真机上才发现 "Error loading shared library libjpeg.so.8"。
+missing=
+for need in $(readelf -d src/jwm | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p'); do
+  [ -e "$DEST/usr/lib/$need" ] || [ -e "$DEST/lib/$need" ] || missing="$missing $need"
+done
+if [ -n "$missing" ]; then
+  echo "jwm: rootfs 缺少运行库:$missing" >&2
+  echo "jwm: 把这些包加进 scripts/build-rootfs-770ed.sh 的 Alpine 列表" >&2
+  exit 1
+fi
+
 # ---------- 4) 安装 ----------
 mkdir -p "$DEST/usr/bin" "$DEST/etc/jwm" "$DEST/usr/share/jwm" "$DEST/root"
 cp src/jwm "$DEST/usr/bin/jwm"
@@ -78,6 +90,10 @@ chmod 0755 "$DEST/usr/bin/jwm"
 cp "$ROOT/rootfs-770ed/etc/jwm/jwmrc" "$DEST/etc/jwm/jwmrc"
 cp "$ROOT/rootfs-770ed/etc/jwm/jwmrc" "$DEST/etc/system.jwmrc"
 cp "$ROOT/rootfs-770ed/etc/jwm/jwmrc" "$DEST/root/.jwmrc"
-chmod 0644 "$DEST/etc/jwm/jwmrc" "$DEST/etc/system.jwmrc" "$DEST/root/.jwmrc"
+# JWM 编译期 sysconfdir=/usr/etc（prefix=/usr），不带 -c 时它会去这里找
+mkdir -p "$DEST/usr/etc"
+cp "$ROOT/rootfs-770ed/etc/jwm/jwmrc" "$DEST/usr/etc/system.jwmrc"
+chmod 0644 "$DEST/etc/jwm/jwmrc" "$DEST/etc/system.jwmrc" "$DEST/root/.jwmrc" \
+  "$DEST/usr/etc/system.jwmrc"
 
 echo "jwm: $DEST/usr/bin/jwm ($(stat -c%s "$DEST/usr/bin/jwm") 字节, SSE 指令 0)"

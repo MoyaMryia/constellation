@@ -84,6 +84,7 @@ if [ "$INSTALL_X" = 1 ]; then
     --root "$DEST" \
     xorg-server xf86-video-fbdev xf86-video-vesa xf86-input-evdev \
     xinit xauth xterm twm xkeyboard-config font-misc-misc font-dejavu \
+    libxinerama libjpeg-turbo libpng libxpm libxft \
     xrdb xmodmap xsetroot xrandr setxkbmap \
     ppp ppp-chat >/dev/null
 
