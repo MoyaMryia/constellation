@@ -1,0 +1,50 @@
+Constellation OS -- third-party components
+==========================================
+
+Everything in this repository that we wrote is GPL-3.0 (see LICENSE).
+The items below are third-party and keep their own licenses.  They are
+included because a bootable image needs them; none of them is relicensed
+by us.
+
+Firmware blobs
+--------------
+rootfs-770ed/lib/firmware/b43/*.fw
+    Broadcom BCM43xx ucode/PCM/initvals, extracted from the Broadcom STA
+    driver (broadcom-wl-5.100.138) with b43-fwcutter 021.
+    Provenance and the exact extraction command: lib/firmware/b43/SOURCE.txt
+    Redistributed for use with the in-kernel b43 driver.  Broadcom's binary
+    licence applies; the files are unmodified.
+
+rootfs-770ed/lib/firmware/agere_*.bin (shipped inside the built image)
+    Agere/Lucent ORiNOCO (Hermes) firmware, from linux-firmware.
+    Redistributable per the linux-firmware LICENCE.* files for these blobs.
+
+regulatory.db / regulatory.db.p7s (shipped inside the built image)
+    wireless-regdb by Luis R. Rodriguez and contributors.  ISC-style
+    licence; the p7s is the kernel's signature of the same database.
+
+Vendored / patched upstream code
+--------------------------------
+third_party/patches/
+    Patches against upstream projects, distributed under the license of the
+    project they patch (apk-tools: GPL-2.0).
+
+kernel/configs/*, busybox/configs/*, and the build scripts
+    Configuration fragments and build glue, written by us (GPL-3.0).  The
+    source code they configure is downloaded at build time from
+    kernel.org / busybox.net / musl.libc.org / x.org / GNU and keeps its
+    own license.
+
+    Upstream source archives are pinned by sha256 in scripts/fetch-sources.sh
+    and in the individual scripts/build-*-770ed.sh helpers, so a build always
+    fetches exactly the version this project was tested with.
+
+Not in this repository
+----------------------
+The BasicLinux 3.5 LCARS flavor (scripts/build-lcars-770ed.sh) builds from
+an upstream checkout of github.com/queenkjuul/basiclinux-lcars, which
+contains Slackware 4.0 packages and its own docs.  Nothing from that tree is
+vendored here; the script only points at a local clone via LCARS_SRC.
+
+ccode-cli (scripts/build-ccode-770ed.sh) is built from the user's own
+checkout of the ccode project and is not vendored here either.

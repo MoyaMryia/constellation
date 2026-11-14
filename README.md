@@ -40,6 +40,12 @@ Constellation OS 是一个面向老旧 x86 硬件的 Linux 发行版项目。其
   用法：`fastfetch --logo assets/fastfetch.txt`，或在 config.jsonc 中设
   `"logo": { "source": "/path/to/assets/fastfetch.txt" }`
 
+## 许可
+
+本项目自己写的代码是 **GPL-3.0**（全文见 [LICENSE](LICENSE)）；第三方组件
+（`rootfs-770ed/lib/firmware/` 下的 Broadcom/Agere 固件、wireless-regdb、
+`third_party/` 的补丁等）保持各自原有许可，清单见 [NOTICE](NOTICE)。
+
 ## 文档
 
 - [docs/design.md](docs/design.md) — 总体设计文档（选型论证、架构基线、路线图）
