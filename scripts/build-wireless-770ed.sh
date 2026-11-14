@@ -34,16 +34,22 @@ PATH=$ROOT/toolchain/musl-i486/bin:$PATH
 export PATH
 
 fetch () {
-  url=$1; file=$SRCROOT/${url##*/}
+  url=$1; sha=${2:-}
+  file=$SRCROOT/${url##*/}
   if [ ! -s "$file" ]; then
     echo "wl: 下载 ${url##*/}" >&2
-    curl -fsSL --retry 3 -o "$file.part" "$url" && mv "$file.part" "$file"
+    curl -fsSL --retry 3 -o "$file.part" "$url" && mv "$file.part" "$file" || return 1
+  fi
+  if [ -n "$sha" ]; then
+    echo "$sha  $file" | sha256sum -c - >/dev/null 2>&1 || {
+      echo "wl: 校验失败：${url##*/}（删除缓存后重试）" >&2
+      rm -f "$file"; return 1; }
   fi
   echo "$file"
 }
 
 # ---- wireless-tools（iwconfig / iwlist）----
-WLT=$(fetch "http://deb.debian.org/debian/pool/main/w/wireless-tools/wireless-tools_30~pre9.orig.tar.gz")
+WLT=$(fetch "http://deb.debian.org/debian/pool/main/w/wireless-tools/wireless-tools_30~pre9.orig.tar.gz" abd9c5c98abf1fdd11892ac2f8a56737544fe101e1be27c6241a564948f34c63)
 cd "$SRCROOT"
 [ -d wireless_tools.30 ] || tar -xzf "$WLT"
 if [ ! -x "$SRCROOT/wireless_tools.30/iwconfig" ]; then
@@ -55,7 +61,7 @@ if [ ! -x "$SRCROOT/wireless_tools.30/iwconfig" ]; then
 fi
 
 # ---- wpa_supplicant ----
-WPA=$(fetch "https://w1.fi/releases/wpa_supplicant-2.10.tar.gz")
+WPA=$(fetch "https://w1.fi/releases/wpa_supplicant-2.10.tar.gz" 20df7ae5154b3830355f8ab4269123a87affdea59fe74fe9292a91d0d7e17b2f)
 cd "$SRCROOT"
 [ -d wpa_supplicant-2.10 ] || tar -xzf "$WPA"
 if [ ! -x "$SRCROOT/wpa_supplicant-2.10/wpa_supplicant/wpa_supplicant" ]; then

@@ -29,10 +29,16 @@ PATH=$MUSL/bin:$PATH
 export PATH
 
 fetch () {
-  url=$1; file=$SRCROOT/${url##*/}
+  url=$1; sha=${2:-}
+  file=$SRCROOT/${url##*/}
   if [ ! -s "$file" ]; then
     echo "up: 下载 ${url##*/}" >&2
     curl -fsSL --retry 3 -o "$file.part" "$url" && mv "$file.part" "$file" || return 1
+  fi
+  if [ -n "$sha" ]; then
+    echo "$sha  $file" | sha256sum -c - >/dev/null 2>&1 || {
+      echo "up: 校验失败：${url##*/}（删除缓存后重试）" >&2
+      rm -f "$file"; return 1; }
   fi
   echo "$file"
 }
@@ -60,7 +66,7 @@ if [ -f "$UAPI_SYS/linux/ioctl.h" ]; then
 fi
 
 # ---------------- mpg123 ----------------
-if t=$(fetch "https://www.mpg123.de/download/mpg123-1.32.6.tar.bz2"); then
+if t=$(fetch "https://www.mpg123.de/download/mpg123-1.32.6.tar.bz2" ccdd1d0abc31d73d8b435fc658c79049d0a905b30669b6a42a03ad169dc609e6); then
   cd "$SRCROOT"; [ -d mpg123-1.32.6 ] || tar -xjf "$t"
   if [ ! -x mpg123-1.32.6/src/mpg123 ]; then
     echo "up: 编 mpg123" >&2
@@ -77,7 +83,7 @@ if t=$(fetch "https://www.mpg123.de/download/mpg123-1.32.6.tar.bz2"); then
 fi
 
 # ---------------- fbset ----------------
-if t=$(fetch "http://deb.debian.org/debian/pool/main/f/fbset/fbset_2.1.orig.tar.gz"); then
+if t=$(fetch "http://deb.debian.org/debian/pool/main/f/fbset/fbset_2.1.orig.tar.gz" 517fa062d7b2d367f931a1c6ebb2bef84907077f0ce3f0c899e34490bbea9338); then
   cd "$SRCROOT"; [ -d fbset-2.1 ] || tar -xzf "$t"
   if [ ! -x fbset-2.1/fbset ]; then
     echo "up: 编 fbset" >&2
@@ -89,7 +95,7 @@ if t=$(fetch "http://deb.debian.org/debian/pool/main/f/fbset/fbset_2.1.orig.tar.
 fi
 
 # ---------------- pciutils (lspci) ----------------
-if t=$(fetch "https://mj.ucw.cz/download/linux/pci/pciutils-3.13.0.tar.gz"); then
+if t=$(fetch "https://mj.ucw.cz/download/linux/pci/pciutils-3.13.0.tar.gz" a03c88a0aab709b1697ca1753766f443e78297f84c7bcd80a82c1422edd7cb42); then
   cd "$SRCROOT"; [ -d pciutils-3.13.0 ] || tar -xzf "$t"
   if [ ! -x pciutils-3.13.0/lspci ]; then
     echo "up: 编 pciutils" >&2
@@ -101,7 +107,7 @@ if t=$(fetch "https://mj.ucw.cz/download/linux/pci/pciutils-3.13.0.tar.gz"); the
 fi
 
 # ---------------- strace ----------------
-if t=$(fetch "https://strace.io/files/6.11/strace-6.11.tar.xz"); then
+if t=$(fetch "https://strace.io/files/6.11/strace-6.11.tar.xz" 83262583a3529f02c3501aa8b8ac772b4cbc03dc934e98bab6e4883626e283a5); then
   cd "$SRCROOT"; [ -d strace-6.11 ] || tar -xJf "$t"
   if [ ! -x strace-6.11/src/strace ]; then
     echo "up: 编 strace" >&2

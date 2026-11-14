@@ -32,10 +32,16 @@ PATH=$MUSL/bin:$PATH
 export PATH
 
 fetch () {
-  url=$1; file=$SRCROOT/${url##*/}
+  url=$1; sha=${2:-}
+  file=$SRCROOT/${url##*/}
   if [ ! -s "$file" ]; then
     echo "dev: 下载 ${url##*/}" >&2
-    curl -fsSL --retry 3 -o "$file.part" "$url" && mv "$file.part" "$file"
+    curl -fsSL --retry 3 -o "$file.part" "$url" && mv "$file.part" "$file" || return 1
+  fi
+  if [ -n "$sha" ]; then
+    echo "$sha  $file" | sha256sum -c - >/dev/null 2>&1 || {
+      echo "dev: 校验失败：${url##*/}（删除缓存后重试）" >&2
+      rm -f "$file"; return 1; }
   fi
   echo "$file"
 }
@@ -45,7 +51,8 @@ LIBGCC=$(find /usr/lib/gcc -path '*32/libgcc.a' 2>/dev/null | head -1)
 [ -n "$LIBGCC" ] || { echo "找不到 32 位 libgcc.a" >&2; exit 1; }
 
 # ---- tcc ----
-TCC_TAR=$(fetch "https://download.savannah.gnu.org/releases/tinycc/tcc-$TCC_VER.tar.bz2")
+TCC_SHA=de23af78fca90ce32dff2dd45b3432b2334740bb9bb7b05bf60fdbfc396ceb9c
+TCC_TAR=$(fetch "https://download.savannah.gnu.org/releases/tinycc/tcc-$TCC_VER.tar.bz2" "$TCC_SHA")
 cd "$SRCROOT"
 [ -d "tcc-$TCC_VER" ] || tar -xjf "$TCC_TAR"
 # tcc 0.9.27 的 TCC_MUSL 分支对 32 位 x86 会落到 "#elif !defined(TCC_ARM_EABI)"
@@ -65,7 +72,8 @@ fi
 [ -x "tcc-$TCC_VER/tcc" ] || { echo "tcc 构建失败" >&2; exit 1; }
 
 # ---- GNU make ----
-MAKE_TAR=$(fetch "https://ftp.gnu.org/gnu/make/make-$MAKE_VER.tar.gz")
+MAKE_SHA=dd16fb1d67bfab79a72f5e8390735c49e3e8e70b4945a15ab1f81ddb78658fb3
+MAKE_TAR=$(fetch "https://ftp.gnu.org/gnu/make/make-$MAKE_VER.tar.gz" "$MAKE_SHA")
 cd "$SRCROOT"
 [ -d "make-$MAKE_VER" ] || tar -xzf "$MAKE_TAR"
 if [ ! -x "make-$MAKE_VER/make" ]; then
@@ -80,7 +88,8 @@ fi
 [ -x "make-$MAKE_VER/make" ] || { echo "make 构建失败" >&2; exit 1; }
 
 # ---- binutils（as / ld / ar / nm / objdump / strip / objcopy / readelf / size）----
-BU_TAR=$(fetch "https://ftp.gnu.org/gnu/binutils/binutils-$BINUTILS_VER.tar.xz")
+BINUTILS_SHA=f6e4d41fd5fc778b06b7891457b3620da5ecea1006c6a4a41ae998109f85a800
+BU_TAR=$(fetch "https://ftp.gnu.org/gnu/binutils/binutils-$BINUTILS_VER.tar.xz" "$BINUTILS_SHA")
 cd "$SRCROOT"
 [ -d "binutils-$BINUTILS_VER" ] || tar -xJf "$BU_TAR"
 # 判断"编好了"要看产物是否干净：只检查文件存在的话，之前编坏的（含 SHA-NI
