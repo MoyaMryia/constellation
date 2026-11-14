@@ -60,8 +60,9 @@ fi
 #   zram          -- zram is a module in the 6.6 flavor (built in for 6.18,
 #                    where modprobe fails silently)
 #   snd-mixer-oss -- provides /dev/mixer for /bin/mixer volume control
+#   snd-pcm-oss   -- provides /dev/dsp and /dev/audio (needed by mpg123/tone)
 #   ppp_generic   -- creates /dev/ppp (modem character device, no bus modalias)
-for m in tridentfb snd-cs4236 snd-mixer-oss floppy zram ppp_generic; do
+for m in tridentfb snd-cs4236 snd-mixer-oss snd-pcm-oss floppy zram ppp_generic; do
   /sbin/modprobe -q "$m" 2>/dev/null || true
 done
 

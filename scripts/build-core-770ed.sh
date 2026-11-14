@@ -169,9 +169,14 @@ make -s -C "$BUSYBOX_SRC" -j"$JOBS" HOSTCC="$HOSTCC" CC="$CC_WRAP" \
 "$MUSL_PREFIX/bin/i486-linux-musl-strip" "$BUSYBOX_SRC/busybox"
 cp "$BUSYBOX_SRC/.config" "$ROOT/busybox/configs/busybox-1.38.0-770ed.config"
 
-# ---------- 3b) mixer（OSS 混音器客户端，静态） ----------
-"$CC_WRAP" -I "$HEADERS" -Os -static -o "$ROOT/build/mixer" "$ROOT/tools/mixer.c"
-"$MUSL_PREFIX/bin/i486-linux-musl-strip" "$ROOT/build/mixer"
+# ---------- 3b) 音频小工具（OSS，静态） ----------
+#   mixer — /dev/mixer 音量控制
+#   tone  — /dev/dsp 上的正弦/滑音自检（验证 CS4237B 真能出声）
+"$CC_WRAP" -m32 -march=i486 -I "$HEADERS" -I "$ROOT/build/uapi-770ed/include" \
+  -Os -static -o "$ROOT/build/mixer" "$ROOT/tools/mixer.c"
+"$CC_WRAP" -m32 -march=i486 -I "$HEADERS" -I "$ROOT/build/uapi-770ed/include" \
+  -Os -static -o "$ROOT/build/tone" "$ROOT/tools/tone.c" -lm
+"$MUSL_PREFIX/bin/i486-linux-musl-strip" "$ROOT/build/mixer" "$ROOT/build/tone"
 
 # ---------- 4) 内核（770ED 配置） ----------
 cp "$KCONFIG" "$KERNEL_SRC/.config"

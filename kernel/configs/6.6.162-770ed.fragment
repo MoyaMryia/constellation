@@ -286,3 +286,7 @@ CONFIG_USB_SERIAL_OPTION=m
 # 它不会出现、不会和 tridentfb 抢显卡；把 gfxpayload 改成 1024x768x16
 # 时它才会接管（QEMU 里的验收就是走这条路）。
 CONFIG_FB_VESA=y
+
+# OSS 的 PCM 前端（/dev/dsp）。没有它 mpg123 / 老程序都打不开声卡：
+# SND_MIXER_OSS 只给 /dev/mixer，放音要 SND_PCM_OSS。
+CONFIG_SND_PCM_OSS=m

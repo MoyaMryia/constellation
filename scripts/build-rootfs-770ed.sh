@@ -274,11 +274,12 @@ fi
 mkdir -p "$DEST/usr/share/constellation"
 cp "$TMPL/usr/bin/fetch" "$DEST/usr/bin/fetch"
 cp "$TMPL/usr/bin/mountusb" "$DEST/usr/bin/mountusb"
+[ -f "$ROOT/build/tone" ] && cp "$ROOT/build/tone" "$DEST/usr/bin/tone"
 cp "$TMPL/usr/bin/wifi" "$DEST/usr/bin/wifi"
 cp "$TMPL/usr/bin/apm" "$DEST/usr/bin/apm"
 cp "$TMPL"/usr/share/constellation/*.txt "$DEST/usr/share/constellation/"
 cp "$TMPL/etc/motd" "$DEST/etc/motd"
-chmod 0755 "$DEST/usr/bin/fetch" "$DEST/usr/bin/mountusb" \
+chmod 0755 "$DEST/usr/bin/fetch" "$DEST/usr/bin/mountusb" "$DEST/usr/bin/tone" \
   "$DEST/usr/bin/wifi" "$DEST/usr/bin/apm"
 
 # ---- 电源管理：覆盖 busybox 的 poweroff/reboot/halt ----
