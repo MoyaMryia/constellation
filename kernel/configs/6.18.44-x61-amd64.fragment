@@ -1,0 +1,114 @@
+# Constellation OS — x86_64 / ThinkPad X61 风味 fragment
+#
+# 依据 docs/design.md §3.2 的裁剪清单，重写为 64 位 + X61 硬件实际需求。
+# 用法（见 scripts/build-core-amd64.sh）：
+#   make ARCH=x86_64 tinyconfig
+#   ./scripts/kconfig/merge_config.sh -m .config <本文件>
+#   make ARCH=x86_64 olddefconfig
+#
+# 与 i486 L4 配置的差异（逐条理由）：
+#   - 硬件换成 X61：ICH8M SATA（SATA_AHCI）取代 ATA_PIIX 为必需；
+#     82566MM（E1000E）取代 8390/PCMCIA 网卡；GMA X3100 走 FB_VESA。
+#   - CONFIG_MODULES=n：X61 所需驱动（ahci/e1000e/vesafb）全部内置，
+#     省下模块基础设施的内存开销（kernel/NOTES.md 量化为约 144 K + 52 KiB）。
+#   - CONFIG_PACKET=y：BusyBox udhcpc 走 AF_PACKET 原始套接字取 DHCP。
+#   - CONFIG_SMP=n + NR_CPUS=1：内存下限优先；T7100 双核不参与。
+#   - 无 PCMCIA/USB/声音/DRM/WiFi：X61 上非首发起不在范围内。
+
+# --- 平台 ---
+CONFIG_64BIT=y
+CONFIG_X86_64=y
+CONFIG_SMP=n
+CONFIG_HZ_100=y
+
+# --- 进程/可执行 ---
+CONFIG_BINFMT_ELF=y
+# 必需：/sbin/init 与所有 s6 服务的 run 都是 #! 脚本。缺此项时内核报
+# "Starting init: /sbin/init exists but couldn't execute it (error -8)"
+# （ENOEXEC），然后回退到 /bin/sh 当 init——系统"能起"但契约全丢。
+CONFIG_BINFMT_SCRIPT=y
+CONFIG_MULTIUSER=y
+CONFIG_POSIX_TIMERS=y
+CONFIG_FUTEX=y
+CONFIG_EPOLL=y
+CONFIG_SIGNALFD=y
+CONFIG_TIMERFD=y
+CONFIG_EVENTFD=y
+CONFIG_SHMEM=y
+CONFIG_INOTIFY_USER=y
+# s6-svscan 用 fcntl 文件锁判定"同目录是否已有实例"，缺此项会报
+# "another instance of s6-svscan is already running on the same directory"
+# （i486 的 L4 配置同样补开过，见 docs/m2-notes.md）。apk 的数据库锁同理。
+CONFIG_FILE_LOCKING=y
+CONFIG_COREDUMP=n
+
+# --- 块层 / 文件系统 ---
+CONFIG_BLOCK=y
+CONFIG_SCSI=y
+CONFIG_BLK_DEV_SD=y
+CONFIG_ATA=y
+CONFIG_SATA_AHCI=y
+CONFIG_ATA_PIIX=y
+CONFIG_MSDOS_PARTITION=y
+CONFIG_EXT4_FS=y
+CONFIG_JBD2=y
+CONFIG_TMPFS=y
+CONFIG_PROC_FS=y
+CONFIG_SYSFS=y
+CONFIG_DEVTMPFS=y
+CONFIG_DEVTMPFS_MOUNT=y
+CONFIG_BLK_DEV_INITRD=y
+CONFIG_RD_GZIP=y
+
+# --- 内存压缩（本项目的核心机制） ---
+CONFIG_SWAP=y
+CONFIG_ZSMALLOC=y
+CONFIG_ZRAM=y
+CONFIG_ZRAM_BACKEND_LZ4=y
+CONFIG_ZRAM_DEF_COMP_LZ4=y
+CONFIG_LZ4_COMPRESS=y
+CONFIG_LZ4_DECOMPRESS=y
+
+# --- 控制台：串口（QEMU 验收）+ VBE 帧缓冲（X61 屏） ---
+CONFIG_TTY=y
+CONFIG_VT=y
+CONFIG_VT_CONSOLE=y
+CONFIG_VGA_CONSOLE=y
+CONFIG_SERIAL_8250=y
+CONFIG_SERIAL_8250_CONSOLE=y
+CONFIG_FB=y
+CONFIG_FB_VESA=y
+CONFIG_FRAMEBUFFER_CONSOLE=y
+CONFIG_FONTS=y
+CONFIG_FONT_8x16=y
+CONFIG_PRINTK=y
+CONFIG_BUG=y
+
+# --- 网络（X61 = Intel 82566MM / e1000e） ---
+CONFIG_NET=y
+CONFIG_INET=y
+CONFIG_PACKET=y
+CONFIG_UNIX=y
+CONFIG_PCI=y
+# NETDEVICES 是 drivers/net 的 menuconfig 闸门，tinyconfig 为 n 时整棵
+# 网卡树不可见（E1000E/NET_VENDOR_INTEL 都随之消失）。
+CONFIG_NETDEVICES=y
+CONFIG_E1000E=y
+CONFIG_IPV6=n
+# Intel 网卡在 `if NET_VENDOR_INTEL` 块内，该符号为 n 时 E1000E 不可见。
+CONFIG_NET_VENDOR_INTEL=y
+
+# --- 内存大户，显式关闭（tinyconfig 之外的兜底） ---
+# 注意 EXPERT 保持 y（tinyconfig 默认）：EXPERT 会 select DEBUG_KERNEL
+# （init/Kconfig），所以 DEBUG_KERNEL 无法关闭；但它本身只是门控、不产生
+# 代码，真正的开销项（KALLSYMS / COREDUMP / NAMESPACES 等）必须靠
+# EXPERT=y 才能显式关掉。实测：CONFIG_EXPERT=n 会让这三项被强制默认 y，
+# bzImage 从 1.90 MiB 涨到 2.40 MiB。故此处不关 EXPERT。
+CONFIG_DRM=n
+CONFIG_SOUND=n
+CONFIG_USB_SUPPORT=n
+CONFIG_WLAN=n
+CONFIG_CGROUPS=n
+CONFIG_NAMESPACES=n
+CONFIG_MODULES=n
+CONFIG_KALLSYMS=n

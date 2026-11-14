@@ -1,0 +1,116 @@
+# Constellation OS x86_64 / X61 — BusyBox applet fragment
+#
+# 基线是 busybox/configs/busybox-1.38.0-M1.config（仅 59 个符号，为
+# initramfs 冒烟最小集）。X61 目标的验收要求是"基础系统自洽完整"
+# （docs/design.md §5.1 D11：从不碰 apk 也能完整使用），故补齐一套
+# 可用的命令行工具集。只加 applet，不加 systemd/模块类重型 FEATURE。
+#
+# 应用方式见 scripts/build-core-amd64.sh：把本文件的 CONFIG_* 行并入
+# .config，再 `make oldconfig`（依赖不满足的项会被 Kconfig 自动丢弃）。
+#
+# 取舍：BusyBox 是单一二进制，新增 applet 只增磁盘体积与按需分页，
+# 不增常驻内存（不执行的 applet 不进 RSS），与低内存目标不冲突。
+
+# --- 文件与目录 ---
+CONFIG_CP=y
+CONFIG_MV=y
+CONFIG_RM=y
+CONFIG_MKDIR=y
+CONFIG_RMDIR=y
+CONFIG_LN=y
+CONFIG_CHMOD=y
+CONFIG_CHOWN=y
+CONFIG_TOUCH=y
+CONFIG_PWD=y
+CONFIG_STAT=y
+CONFIG_READLINK=y
+CONFIG_REALPATH=y
+CONFIG_BASENAME=y
+CONFIG_DIRNAME=y
+CONFIG_MKTEMP=y
+CONFIG_MOUNTPOINT=y
+CONFIG_DF=y
+CONFIG_DU=y
+CONFIG_DD=y
+
+# --- 文本处理 ---
+CONFIG_GREP=y
+CONFIG_EGREP=y
+CONFIG_SED=y
+CONFIG_AWK=y
+CONFIG_CUT=y
+CONFIG_SORT=y
+CONFIG_UNIQ=y
+CONFIG_WC=y
+CONFIG_HEAD=y
+CONFIG_TAIL=y
+CONFIG_TR=y
+CONFIG_MORE=y
+CONFIG_VI=y
+CONFIG_DIFF=y
+CONFIG_XARGS=y
+CONFIG_FIND=y
+CONFIG_WHICH=y
+CONFIG_TR=y
+
+# --- 进程与系统信息 ---
+CONFIG_PS=y
+CONFIG_TOP=y
+CONFIG_KILL=y
+CONFIG_KILLALL=y
+CONFIG_PIDOF=y
+CONFIG_UPTIME=y
+CONFIG_DATE=y
+CONFIG_ID=y
+CONFIG_WHOAMI=y
+CONFIG_ENV=y
+CONFIG_NOHUP=y
+CONFIG_WATCH=y
+CONFIG_SEQ=y
+CONFIG_YES=y
+CONFIG_EXPR=y
+CONFIG_CLEAR=y
+
+# --- 归档与校验 ---
+CONFIG_TAR=y
+CONFIG_GZIP=y
+CONFIG_GUNZIP=y
+CONFIG_XZ=y
+CONFIG_UNXZ=y
+CONFIG_BZIP2=y
+CONFIG_MD5SUM=y
+CONFIG_SHA256SUM=y
+CONFIG_HEXDUMP=y
+CONFIG_OD=y
+
+# --- 网络 ---
+CONFIG_PING=y
+CONFIG_WGET=y
+CONFIG_NC=y
+CONFIG_NETSTAT=y
+CONFIG_NSLOOKUP=y
+CONFIG_IFCONFIG=y
+CONFIG_ROUTE=y
+CONFIG_TELNET=y
+
+# --- 账号 ---
+CONFIG_PASSWD=y
+CONFIG_SU=y
+CONFIG_LOGIN=y
+CONFIG_GETTY=y
+
+# --- 元 applet 与 shell 内建 ---
+# `busybox` 本身作为 applet 必须开启，否则 `busybox --list/--install`
+# 一律返回 "applet not found"（M1 配置里是关的）。
+CONFIG_BUSYBOX=y
+# ash 内建：缺 ASH_TEST 时脚本里的 `[ ... ]` 会变成"命令找不到"，
+# 进而把 `[ cond ] || exec X` 整体误判为 false 走进兜底分支
+# （实战症状：所有 getty 都落进 sleep 分支，没有登录提示符）。
+# 选项名是 ASH_TEST / ASH_ECHO / ASH_PRINTF，不是 ASH_BUILTIN_*。
+CONFIG_ASH_TEST=y
+CONFIG_ASH_ECHO=y
+CONFIG_ASH_PRINTF=y
+CONFIG_ASH_ALIAS=y
+CONFIG_ASH_GETOPTS=y
+CONFIG_ASH_CMDCMD=y
+CONFIG_ASH_HELP=y

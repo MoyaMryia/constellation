@@ -1,0 +1,15 @@
+#!/bin/sh
+# 有线网络：X61 是 Intel 82566MM（CONFIG_E1000E，已内置）。
+# 无 udev，接口保持内核命名，取第一个非 lo 设备。
+iface=
+for d in /sys/class/net/*; do
+  n=${d##*/}
+  [ "$n" = lo ] && continue
+  iface=$n
+  break
+done
+[ -n "$iface" ] || exec /bin/sleep 3600
+
+/bin/ip link set "$iface" up
+echo "constellation: udhcpc on $iface"
+exec /bin/udhcpc -f -i "$iface" -s /etc/udhcpc.script
