@@ -1,0 +1,22 @@
+#!/bin/sh
+# apm -- read APM status from /proc/apm (the 770ED has APM 1.2, no ACPI).
+#   apm          one-line summary
+#   apm battery  battery percentage / state
+#   apm raw      the raw /proc/apm line
+set -u
+F=/proc/apm
+[ -r "$F" ] || { echo "apm: no /proc/apm (kernel built without APM, or BIOS does not provide it)"; exit 1; }
+cmd=${1:-raw}
+set -- $(cat "$F")
+# /proc/apm: 1.2 1.2 0x03 0x01 0x03 0x03 99% 3 min
+case $cmd in
+  raw) cat "$F" ;;
+  battery)
+    # fields: driver ver, bios ver, ac line, battery status, battery flag, ...
+    echo "battery: ${5:-?}  ${6:-?}  (raw: $(cat "$F"))"
+    ;;
+  *)
+    echo "APM: $(cat "$F")"
+    echo "  ac line(3=off/line): $3   battery status: $4   battery flags: $5   level: ${7:-?}   time left: ${8:-?}"
+    ;;
+esac

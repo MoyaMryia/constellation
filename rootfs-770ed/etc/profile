@@ -1,0 +1,44 @@
+# /etc/profile -- system-wide shell setup for Constellation OS (ThinkPad 770ED)
+
+PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
+export PATH
+HOSTNAME=$(cat /etc/hostname 2>/dev/null), HOSTNAME=${HOSTNAME:-constellation}
+
+# BusyBox ash understands \u \h \w \$ in PS1
+PS1='\u@\h:\w\$ '
+export PS1
+
+# Useful aliases (POSIX shells only)
+alias ll='ls -l'
+alias la='ls -la'
+alias l='ls'
+alias ..='cd ..'
+alias ...='cd ../..'
+alias df='df -k'
+alias du='du -k'
+alias free='free'
+alias md='mkdir -p'
+alias rd='rmdir'
+alias g='grep -i'
+alias x='x'
+alias cls='clear'
+
+# Colours for a colour-capable terminal (the VGA console stays plain)
+case "${TERM:-}" in
+  linux|dumb) ;;
+  *) alias ls='ls --color=auto' 2>/dev/null || true ;;
+esac
+
+# Greet interactive logins once with the machine mark
+if [ -n "${PS1:-}" ] && [ -z "${CONSTELLATION_GREETED:-}" ] && [ -x /usr/bin/fetch ]; then
+  CONSTELLATION_GREETED=1
+  export CONSTELLATION_GREETED
+  /usr/bin/fetch 2>/dev/null || true
+fi
+
+# run profile.d snippets (e.g. PATH additions installed later)
+if [ -d /etc/profile.d ]; then
+  for f in /etc/profile.d/*.sh; do
+    [ -r "$f" ] && . "$f"
+  done
+fi

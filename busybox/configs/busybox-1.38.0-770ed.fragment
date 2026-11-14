@@ -36,3 +36,24 @@ CONFIG_CHVT=y
 # 被 Kconfig 静默丢掉，症状就是 "$((arith)) is disabled"）。
 CONFIG_FEATURE_SH_MATH=y
 CONFIG_FEATURE_SH_MATH_64=y
+
+# ---- 行编辑 / 历史 / 补全：没有这些，ash 连上下键翻历史都不支持 ----
+# FEATURE_EDITING 关着时 MAX_LEN 与 HISTORY 都是 0，表现就是方向键没反应、
+# Ctrl-A 不跳到行首、Tab 不补全。打开后 ash 自带行编辑器（不需要 readline）。
+CONFIG_FEATURE_EDITING=y
+CONFIG_FEATURE_EDITING_MAX_LEN=1024
+CONFIG_FEATURE_EDITING_HISTORY=200
+CONFIG_FEATURE_EDITING_SAVEHISTORY=y
+CONFIG_FEATURE_TAB_COMPLETION=y
+# FANCY_PROMPT 才会解释 PS1 里的 \u \h \w \$（/etc/profile 用到）
+CONFIG_FEATURE_EDITING_FANCY_PROMPT=y
+
+# ---- 常用但默认没开的 applet ----
+CONFIG_LESS=y
+CONFIG_XXD=y
+CONFIG_UNZIP=y
+CONFIG_BLKID=y
+CONFIG_FDISK=y
+CONFIG_LOGGER=y
+CONFIG_CROND=y
+CONFIG_SYSCTL=y

@@ -1,0 +1,23 @@
+#!/bin/sh
+# Runs after s6-svscan has stopped all supervised services (s6 semantics:
+# "$scandir/.s6-svscan/finish" is executed when s6-svscan exits).
+#
+# This is where the machine actually goes down: stop swap, flush and remount
+# the root read-only, then ask the kernel to power off / reboot. The flag files
+# are written by /sbin/poweroff, /sbin/reboot and /sbin/halt.
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
+swapoff -a 2>/dev/null
+sync
+umount -a -r 2>/dev/null
+sync
+mount -o remount,ro / 2>/dev/null
+sync
+
+if [ -e /run/constellation-reboot ]; then
+  exec /bin/busybox reboot -f
+elif [ -e /run/constellation-halt ]; then
+  exec /bin/busybox halt -f
+else
+  exec /bin/busybox poweroff -f
+fi

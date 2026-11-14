@@ -62,18 +62,27 @@
 
   <RootMenu labeled="true" height="20">
     <Program label="Terminal (st)" icon="xterm">st</Program>
-    <Program label="File manager (mc)" icon="folder">mc</Program>
-    <Program label="System check (hwcheck)" icon="info">st -e hwcheck</Program>
+    <Program label="System check (hwcheck)" icon="info">st -e sh -c "hwcheck; echo; echo press Enter; read _; " </Program>
+    <Program label="Fetch (mark + summary)" icon="info">st -e sh -c "fetch; sleep 30"</Program>
     <Separator/>
     <Menu label="Network">
-      <Program label="DHCP renew">udhcpc -i eth0 -n -q</Program>
+      <Program label="DHCP renew">st -e sh -c "udhcpc -i eth0 -n -q; sleep 5"</Program>
       <Program label="Interface info">st -e sh -c "ip addr; sleep 30"</Program>
+      <Program label="Wi-Fi scan">st -e sh -c "wifi scan; sleep 30"</Program>
+      <Program label="Wi-Fi status">st -e sh -c "wifi status; sleep 30"</Program>
+    </Menu>
+    <Menu label="Storage">
+      <Program label="Mount USB stick">st -e sh -c "mountusb; sleep 10"</Program>
+      <Program label="Unmount USB stick">st -e sh -c "mountusb -u; sleep 10"</Program>
+      <Program label="Disk usage">st -e sh -c "df -k; sleep 30"</Program>
+      <Program label="Partitions">st -e sh -c "cat /proc/partitions; sleep 30"</Program>
     </Menu>
     <Menu label="Hardware">
-      <Program label="PCI devices">st -e sh -c "lspci; sleep 30"</Program>
-      <Program label="USB devices">st -e sh -c "lsusb; sleep 30"</Program>
-      <Program label="Framebuffer mode">st -e sh -c "fbset; sleep 30"</Program>
+      <Program label="PCI devices">st -e sh -c "cat /sys/bus/pci/devices/*/uevent 2>/dev/null | head -n 40; sleep 30"</Program>
+      <Program label="USB devices">st -e sh -c "ls /sys/bus/usb/devices; sleep 30"</Program>
+      <Program label="Framebuffer mode">st -e sh -c "cat /proc/fb; sleep 30"</Program>
       <Program label="Volume">st -e sh -c "mixer; mixer 80; sleep 3"</Program>
+      <Program label="Battery / AC">st -e sh -c "apm; sleep 20"</Program>
     </Menu>
     <Separator/>
     <Restart label="Restart window manager"/>

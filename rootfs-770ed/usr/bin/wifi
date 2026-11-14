@@ -1,0 +1,81 @@
+#!/bin/sh
+# wifi -- tiny Wi-Fi helper for the BCM4318 (b43) / any wext-capable card.
+#
+#   wifi                 scan and list access points
+#   wifi scan            same
+#   wifi connect SSID [PASSPHRASE]
+#   wifi status
+#   wifi down
+#
+# WPA/WPA2-PSK is handled by wpa_supplicant (wext driver, internal TLS);
+# open/WEP networks fall back to iwconfig. DHCP is done with udhcpc.
+set -u
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+CONF=/etc/wpa_supplicant/wpa_supplicant.conf
+
+iface() {
+  for d in /sys/class/net/*; do
+    n=${d##*/}
+    [ "$n" = lo ] && continue
+    [ -d "$d/wireless" ] && { echo "$n"; return 0; }
+    [ -e "$d/phy80211" ] && { echo "$n"; return 0; }
+  done
+  return 1
+}
+
+cmd=${1:-scan}
+case $cmd in
+  scan)
+    i=$(iface) || { echo "wifi: no wireless interface (is the card inserted? modprobe b43)"; exit 1; }
+    ip link set "$i" up 2>/dev/null
+    echo "wifi: scanning on $i ..."
+    iwlist "$i" scan 2>/dev/null | awk '
+      /Cell [0-9]+ - Address/ { essid = ""; sig = ""; enc = "open" }
+      /ESSID:/ { sub(/.*ESSID:/, ""); gsub(/"/, ""); essid = $0 }
+      /Signal level/ { sub(/.*Signal level[=:]/, ""); sig = $0 }
+      /Encryption key:on/ { enc = "WPA/WEP" }
+      /^ *$/ { if (essid != "") printf "  %-24s %-12s %s\n", essid, sig, enc }
+      END { if (essid != "") printf "  %-24s %-12s %s\n", essid, sig, enc }
+    ' | head -n 15
+    ;;
+  connect)
+    [ $# -ge 2 ] || { echo "usage: wifi connect SSID [PASSPHRASE]"; exit 1; }
+    ssid=$2; psk=${3:-}
+    i=$(iface) || { echo "wifi: no wireless interface"; exit 1; }
+    ip link set "$i" up 2>/dev/null
+    if [ -n "$psk" ]; then
+      mkdir -p /var/run/wpa_supplicant
+      cat > "$CONF" <<WCONF
+ctrl_interface=/var/run/wpa_supplicant
+update_config=1
+
+network={
+	ssid="$ssid"
+	psk="$psk"
+}
+WCONF
+      chmod 0600 "$CONF"
+      killall wpa_supplicant 2>/dev/null
+      wpa_supplicant -B -i "$i" -c "$CONF" || { echo "wifi: wpa_supplicant failed"; exit 1; }
+      echo "wifi: WPA supplicant started on $i"
+    else
+      echo "wifi: no passphrase given -- trying open network"
+      iwconfig "$i" essid "$ssid" 2>/dev/null
+    fi
+    sleep 2
+    echo "wifi: requesting DHCP lease ..."
+    udhcpc -n -q -i "$i" || echo "wifi: DHCP failed (try: udhcpc -i $i)"
+    ;;
+  status)
+    i=$(iface) || { echo "wifi: no wireless interface"; exit 1; }
+    iwconfig "$i" 2>/dev/null
+    ip addr show "$i" 2>/dev/null | sed -n '1,4p'
+    ;;
+  down)
+    i=$(iface) || { echo "wifi: no wireless interface"; exit 1; }
+    killall wpa_supplicant 2>/dev/null
+    ip link set "$i" down 2>/dev/null
+    echo "wifi: $i down"
+    ;;
+  *) echo "usage: wifi [scan|connect SSID [PASSPHRASE]|status|down]"; exit 1 ;;
+esac

@@ -1,6 +1,7 @@
 
   Constellation OS -- ThinkPad 770ED flavor
 
-  Run `fetch` for this machine's mark and a short summary;
-  `hwcheck` for a hardware report; `x` for the graphical desktop (JWM).
+  fetch      mark + summary        hwcheck    hardware report
+  x          graphical desktop     wifi       scan / connect
+  mountusb   USB stick             tcc/make   build C programs
 

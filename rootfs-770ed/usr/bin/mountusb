@@ -1,0 +1,80 @@
+#!/bin/sh
+# mountusb [--umount] -- mount (or unmount) the first USB mass-storage
+# partition. The 770ED has USB 1.1 only (UHCI), so expect ~1 MB/s.
+#
+# The image has no udev/automounter: usb-storage is loaded by the kernel
+# hotplug helper (/sbin/hotplug via MODALIAS), the block device then shows up
+# as /dev/sdb (the CF card is /dev/sda). This script finds it, picks the
+# filesystem type with blkid and mounts it on /media/usb.
+set -u
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+MNT=/media/usb
+
+umount_usb() {
+  if mountpoint -q "$MNT" 2>/dev/null; then
+    sync
+    umount "$MNT" && { echo "mountusb: unmounted $MNT"; rmdir "$MNT" 2>/dev/null; }
+  else
+    echo "mountusb: $MNT is not mounted"
+  fi
+  exit 0
+}
+[ "${1:-}" = "--umount" ] || [ "${1:-}" = "-u" ] && umount_usb
+
+# Pick the first sd* disk that is NOT the one holding "/" (the CF card is
+# /dev/sda on this machine; a USB stick shows up as /dev/sdb). Do not rely on
+# /sys/block/sdX/removable: some card readers and QEMU's usb-storage report 0.
+# Which sd* is the boot disk? Take it from the kernel command line (root=...);
+# /proc/mounts reports "/dev/root" in this no-udev image, which is useless here.
+rootdev=$(awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^root=/) { sub(/^root=/, "", $i); print $i; exit } }' \
+           /proc/cmdline 2>/dev/null)
+[ -n "$rootdev" ] || rootdev=$(findmnt -no SOURCE / 2>/dev/null || echo "")
+rootname=
+case $rootdev in
+  /dev/sd?*) rootname=$(echo "$rootdev" | sed 's|/dev/\(sd[a-z]\).*|\1|') ;;
+esac
+# Fallback: skip any whole disk that has a partition mounted on / or /boot
+mounted_disks=$(awk '$2 == "/" || $2 == "/boot" { print $1 }' /proc/mounts 2>/dev/null)
+dev=
+for d in /sys/block/sd*; do
+  [ -e "$d" ] || continue
+  name=${d##*/}
+  [ "$name" = "$rootname" ] && continue
+  skip=0
+  for m in $mounted_disks; do
+    case $m in /dev/"$name"*) skip=1 ;; esac
+  done
+  [ "$skip" = 1 ] && continue
+  for p in "/dev/${name}"1 "/dev/${name}"2 "/dev/${name}"3 "/dev/${name}"4; do
+    [ -b "$p" ] && { dev=$p; break; }
+  done
+  [ -n "$dev" ] && break
+done
+
+if [ -z "$dev" ]; then
+  echo "mountusb: no USB mass-storage partition found"
+  echo "  plugged in just now?  dmesg | tail -n 20   and   ls /dev/sd*"
+  exit 1
+fi
+
+mkdir -p "$MNT"
+[ -d "$MNT" ] || { echo "mountusb: cannot create $MNT" >&2; exit 1; }
+
+type=$(blkid -o value -s TYPE "$dev" 2>/dev/null || echo "")
+case $type in
+  vfat|fat|msdos) opts="-t vfat -o iocharset=utf8,umask=022" ;;
+  exfat)          opts="-t exfat -o iocharset=utf8,umask=022" ;;
+  ntfs)           opts="-t ntfs -o umask=022" ;;
+  ext2|ext3|ext4) opts="-t $type" ;;
+  *)              opts="" ; type="auto" ;;
+esac
+
+# shellcheck disable=SC2086
+if mount $opts "$dev" "$MNT"; then
+  echo "mountusb: $dev ($type) mounted on $MNT"
+  df -h "$MNT" 2>/dev/null | tail -n 2
+  echo "  unmount with: mountusb -u"
+else
+  echo "mountusb: mount of $dev failed (type=$type)" >&2
+  exit 1
+fi

@@ -1,0 +1,22 @@
+Constellation OS -- ThinkPad 770ED
+==================================
+
+  fetch        mark + a one-screen summary of this machine
+  hwcheck      hardware self-check (PCI / PCMCIA / fb / sound / APM)
+  x            start Xorg + JWM on VT2 (VT1 keeps the text console)
+
+  wifi         scan for access points
+  wifi connect "SSID" "passphrase"     (WPA/WPA2, via wpa_supplicant)
+  wifi status
+  mountusb     mount a USB stick on /media/usb   (mountusb -u to unmount)
+  apm          battery / AC status from /proc/apm
+  mixer        volume control (OSS mixer)
+
+  tcc file.c -o file      C compiler (Tiny C Compiler, no SSE)
+  make                    GNU make
+  vi file                 editor;  q:  :w  :q  :q!
+
+Everything here is ASCII-only: the VGA text console has no CJK font, so
+Chinese text would render as garbage.
+
+Card layout: p1 FAT16 boot (grub4dos) / p2 swap / p3 ext4 root.

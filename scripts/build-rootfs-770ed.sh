@@ -217,6 +217,12 @@ if [ "$INSTALL_X" = 1 ]; then
     ROOTFS_DEST="$DEST" JOBS="${JOBS:-4}" "$ROOT/scripts/build-devtools-770ed.sh" >/dev/null
   fi
 
+  # 额外用户态程序：mpg123（MP3 播放器）、fbset、lspci，以及目标机上的
+  # Linux UAPI 头（写 C 程序时 #include <linux/...> 要用）
+  if [ "${SKIP_USERSPACE:-0}" != 1 ]; then
+    ROOTFS_DEST="$DEST" JOBS="${JOBS:-4}" "$ROOT/scripts/build-userspace-770ed.sh" >/dev/null
+  fi
+
   # 无线工具：iwconfig/iwlist（wireless-tools）+ wpa_supplicant（wext + internal TLS），
   # 都用本工程 i486 musl 工具链编（Alpine 的是 SSE 基线）。
   if [ "${SKIP_WIRELESS:-0}" != 1 ]; then
@@ -253,9 +259,37 @@ fi
 # fetch：Mark（拼色 * 号）+ 系统信息；logo 有真彩与 16 色两版（VGA 控制台只认 16 色）
 mkdir -p "$DEST/usr/share/constellation"
 cp "$TMPL/usr/bin/fetch" "$DEST/usr/bin/fetch"
+cp "$TMPL/usr/bin/mountusb" "$DEST/usr/bin/mountusb"
+cp "$TMPL/usr/bin/wifi" "$DEST/usr/bin/wifi"
+cp "$TMPL/usr/bin/apm" "$DEST/usr/bin/apm"
 cp "$TMPL"/usr/share/constellation/*.txt "$DEST/usr/share/constellation/"
 cp "$TMPL/etc/motd" "$DEST/etc/motd"
-chmod 0755 "$DEST/usr/bin/fetch"
+chmod 0755 "$DEST/usr/bin/fetch" "$DEST/usr/bin/mountusb" \
+  "$DEST/usr/bin/wifi" "$DEST/usr/bin/apm"
+
+# ---- 电源管理：覆盖 busybox 的 poweroff/reboot/halt ----
+# busybox 的这三个 applet 假设 PID 1 是 busybox init，只给 PID 1 发信号；
+# 我们的 PID 1 是 s6-svscan，所以 `poweroff` 看起来毫无反应。换成会走
+# s6 关停流程、最后调用 reboot(2)（APM BIOS 断电）的包装脚本。
+# 注意：$DEST/sbin/poweroff 此刻是指向 ../bin/busybox 的软链，直接 cp 会
+# **透过软链把 busybox 本体覆盖掉**（踩过一次：镜像里 /bin/busybox 变成了
+# 一个 shell 脚本）。所以先 rm 掉，再放真文件。
+for n in poweroff reboot halt shutdown; do
+  rm -f "$DEST/sbin/$n"
+done
+cp "$TMPL/sbin/poweroff" "$DEST/sbin/poweroff"
+cp "$TMPL/sbin/shutdown" "$DEST/sbin/shutdown"
+ln -sf poweroff "$DEST/sbin/reboot"
+ln -sf poweroff "$DEST/sbin/halt"
+for n in poweroff reboot halt shutdown; do
+  chmod 0755 "$DEST/sbin/$n"
+done
+# 自检：busybox 必须还是 ELF（别被上面的 cp 之类误伤）
+head -c 4 "$DEST/bin/busybox" | grep -q ELF || {
+  echo "build-rootfs: /bin/busybox 被破坏了（不是 ELF）" >&2; exit 1; }
+mkdir -p "$DEST/etc/s6/.s6-svscan"
+cp "$TMPL/etc/s6/.s6-svscan/finish" "$DEST/etc/s6/.s6-svscan/finish"
+chmod 0755 "$DEST/etc/s6/.s6-svscan/finish"
 
 chmod 0755 "$DEST/sbin/init" "$DEST/sbin/hotplug" "$DEST/usr/sbin/hwcheck" \
   "$DEST/etc/s6/"*/run "$DEST/etc/udhcpc.script"
@@ -281,6 +315,19 @@ done
 chmod 0644 "$DEST/etc/passwd" "$DEST/etc/group" "$DEST/etc/securetty" "$DEST/etc/mdev.conf"
 chmod 0600 "$DEST/etc/shadow"
 printf 'constellation\n' > "$DEST/etc/hostname"
+
+# ---- 让它像个系统，而不是 rescue shell ----
+# /etc/profile（PATH/PS1/别名/登录时打一次 Mark）、/etc/issue（登录横幅）、
+# /etc/hosts、/etc/resolv.conf、/etc/profile.d、/root/README
+mkdir -p "$DEST/etc/profile.d" "$DEST/root" "$DEST/media" "$DEST/mnt"
+cp "$TMPL/etc/profile" "$DEST/etc/profile"
+[ -f "$TMPL/etc/issue" ] && cp "$TMPL/etc/issue" "$DEST/etc/issue"
+cp "$TMPL/etc/hosts" "$DEST/etc/hosts"
+cp "$TMPL/etc/resolv.conf" "$DEST/etc/resolv.conf"
+cp "$TMPL"/etc/profile.d/*.sh "$DEST/etc/profile.d/" 2>/dev/null || true
+cp "$TMPL/root/README" "$DEST/root/README"
+chmod 0644 "$DEST/etc/profile" "$DEST/etc/hosts" "$DEST/etc/resolv.conf" "$DEST/root/README"
+chmod 0755 "$DEST/etc/profile.d" 2>/dev/null || true
 # fstab 只是给"人"和 mount -a/swapon -a 看的：真正的根是内核命令行
 # root= 挂的，swap 由 init 按命令行 cswap= 启用。但内容必须和实际布局一致——
 # 之前这里把根写成了 /dev/sda2，而 p2 是 swap 分区（布局 p1=boot / p2=swap /

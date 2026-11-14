@@ -90,7 +90,10 @@ trap cleanup EXIT HUP INT TERM
   printf 'Uptime:  %s\n' "$up"
   printf 'Shell:   %s\n' "$(basename "${SHELL:-/bin/sh}")"
   printf 'Display: %s\n' "$desk"
-  printf 'Disk:    %s\n' "$(df -h / 2>/dev/null | awk 'NR == 2 { printf "%s / %s (%s)", $3, $2, $5 }')"
+  # busybox df has no -h (CONFIG_FEATURE_DF_FANCY off): use -k and convert
+  printf 'Disk:    %s\n' "$(df -k / 2>/dev/null | awk 'NR == 2 {
+      u = $3 / 1024; t = $2 / 1024; p = (t > 0) ? (u * 100 / t) : 0
+      printf "%.0f MiB / %.0f MiB (%.0f%%)", u, t, p }')"
 } > "$info" 2>/dev/null
 
 # ---- 3) merge the two columns: pad by *visible* width (ANSI stripped) ----
@@ -114,7 +117,11 @@ awk '
       t = a; gsub(/\033\[[0-9;]*m/, "", t)
       gap = w - length(t) + 3
       if (gap < 1) gap = 1
-      printf "%s%*s%s\n", a, gap, "", (i <= ni) ? info[i] : ""
+      # busybox awk does NOT support %*s (dynamic width); it aborts with
+      # "awk: cmd line:N %*x formats are not supported". Build the padding.
+      pad = ""
+      for (j = 0; j < gap; j++) pad = pad " "
+      printf "%s%s%s\n", a, pad, (i <= ni) ? info[i] : ""
     }
   }
 ' "$logo" "$info"

@@ -1,0 +1,49 @@
+#!/bin/sh
+# poweroff / reboot / halt for a system whose PID 1 is s6-svscan.
+#
+# Why this wrapper: busybox's poweroff applet assumes PID 1 is *busybox init*
+# and just signals it; with s6-svscan as PID 1 that signal does nothing, so
+# `poweroff` appeared to hang forever. Here we stop the supervision tree
+# properly and then call reboot(2) through `busybox poweroff -f`, which on this
+# machine (APM 1.2, no ACPI) ends up in the APM BIOS power-off call.
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+ACTION=${0##*/}
+
+case $ACTION in
+  reboot) echo "reboot requested" ;;
+  halt)   echo "halt requested" ;;
+  *)      ACTION=poweroff; echo "poweroff requested" ;;
+esac
+
+# Tell /etc/s6/.s6-svscan/finish what to do once everything has stopped.
+mkdir -p /run 2>/dev/null
+rm -f /run/constellation-reboot /run/constellation-halt
+case $ACTION in
+  reboot) : > /run/constellation-reboot ;;
+  halt)   : > /run/constellation-halt ;;
+esac
+
+pid=$(pidof s6-svscan 2>/dev/null)
+if [ -n "$pid" ]; then
+  kill -TERM "$pid" 2>/dev/null
+  i=0
+  while [ $i -lt 15 ]; do
+    pidof s6-svscan >/dev/null 2>&1 || break
+    sleep 1
+    i=$((i + 1))
+  done
+fi
+
+# If the finish script already powered off we never get here; otherwise do the
+# final steps ourselves (services may have been dead already).
+swapoff -a 2>/dev/null
+sync
+umount -a -r 2>/dev/null
+mount -o remount,ro / 2>/dev/null
+sync
+
+case $ACTION in
+  reboot) exec /bin/busybox reboot -f ;;
+  halt)   exec /bin/busybox halt -f ;;
+  *)      exec /bin/busybox poweroff -f ;;
+esac

@@ -1,0 +1,14 @@
+#!/bin/sh
+# shutdown [-h|-r] [now]  -- thin wrapper around poweroff/reboot
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+mode=poweroff
+for a in "$@"; do
+  case $a in
+    -r|-R|--reboot) mode=reboot ;;
+    -h|-H|-P|--poweroff|--halt) mode=poweroff ;;
+    now|"") ;;
+    *) echo "shutdown: ignoring argument '$a' (only 'now', -h, -r are supported)" ;;
+  esac
+done
+echo "shutdown: $mode now"
+exec "/sbin/$mode"

@@ -83,7 +83,15 @@ fi
 BU_TAR=$(fetch "https://ftp.gnu.org/gnu/binutils/binutils-$BINUTILS_VER.tar.xz")
 cd "$SRCROOT"
 [ -d "binutils-$BINUTILS_VER" ] || tar -xJf "$BU_TAR"
-if [ ! -x "binutils-$BINUTILS_VER/objdump/objdump" ]; then
+# 判断"编好了"要看产物是否干净：只检查文件存在的话，之前编坏的（含 SHA-NI
+# 的 xorps/pinsrd）会被当成已完成。
+NEED_BU=0
+if [ ! -x "binutils-$BINUTILS_VER/binutils/objdump" ]; then
+  NEED_BU=1
+elif objdump -d "binutils-$BINUTILS_VER/binutils/objdump" 2>/dev/null | grep -q '%xmm'; then
+  NEED_BU=1
+fi
+if [ "$NEED_BU" = 1 ]; then
   echo "dev: 编 binutils" >&2
   cd "binutils-$BINUTILS_VER"
   # 只要三组：as / ld / binutils 工具。关掉 gdb、gold、nls、werror 省时间。
@@ -92,8 +100,22 @@ if [ ! -x "binutils-$BINUTILS_VER/objdump/objdump" ]; then
     --disable-gold --disable-sim --disable-libdecnumber \
     CC=i486-linux-musl-gcc CFLAGS="$CFLAGS_COMMON -Wno-error" \
     LDFLAGS="-static" >/dev/null
-  make -j"$JOBS" all-gas all-ld all-binutils >/dev/null 2>&1 || \
-    make -j"$JOBS" all-gas all-ld all-binutils
+  # 注意：必须在 make 命令行上强制 CFLAGS。只在 configure 里给不够——binutils
+  # 的某些子目录（libiberty 等）会用自己的 CFLAGS，结果混进 xorps 这类 SSE
+  # 指令（PII 上就是 SIGILL）。踩过一次：readelf/objdump/ld 里各有 132 条。
+  BU_CFLAGS="$CFLAGS_COMMON"
+  # binutils 2.42 的 libiberty/sha1.c 在 configure 检测到 x86 有 SHA 扩展时，会用
+  # __attribute__((target("sse4.1,sha"))) 编出 SHA-NI 版本的 sha1 —— 宿主上是 x86_64
+  # gcc，检测必然为真，于是 ld/objdump/readelf 里各混进 132 条 xorps/pinsrd。
+  # PII 没有这些指令，一调用就 SIGILL。检测是在宿主上做的，与我们 -mno-sse 无关，
+  # 所以必须在 configure 之后把它关掉。
+  # 直接在源码层面关掉：改 config.h 不够，make 会重新跑子目录的 configure 把
+  # libiberty/config.h 又生成回来（这就是第一次"修好"后又冒出 132 条的原因）。
+  sed -i 's|^#ifdef HAVE_X86_SHA1_HW_SUPPORT|#if 0 /* 770ED: PII has no SSE4.1/SHA */|' \
+    libiberty/sha1.c
+  rm -f libiberty/sha1.o
+  make -j"$JOBS" CFLAGS="$BU_CFLAGS" all-gas all-ld all-binutils >/dev/null 2>&1 || \
+    make -j"$JOBS" CFLAGS="$BU_CFLAGS" all-gas all-ld all-binutils
   cd "$SRCROOT"
 fi
 

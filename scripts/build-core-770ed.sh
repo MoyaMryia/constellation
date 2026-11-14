@@ -46,7 +46,9 @@ KERNEL_SRC=$ROOT/kernel/src/linux-$KVER
 BUSYBOX_SRC=$ROOT/busybox/src/busybox-1.38.0
 HEADERS=$ROOT/build/hdrs-i386
 MODROOT=${MODROOT:-$ROOT/build/modroot-770ed}
-BB_FRAGMENTS="$ROOT/busybox/configs/busybox-1.38.0-amd64.fragment $ROOT/busybox/configs/busybox-1.38.0-770ed.fragment"
+# 770ED 只能用自己的 fragment：amd64 那份里的 CFLAGS（-march=x86-64 之类）
+# 会把 i486 构建带歪，而且它只属于 x86_64 分支，不一定存在。
+BB_FRAGMENTS="$ROOT/busybox/configs/busybox-1.38.0-770ed.fragment"
 
 "$ROOT/scripts/fetch-sources.sh"
 
