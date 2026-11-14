@@ -17,7 +17,7 @@ Constellation OS 是一个面向老旧 x86 硬件的 Linux 发行版项目。其
 | CPU | Pentium 133 MHz（无 MMX，i586，带 FPU 与 TSC） | Mobile Pentium II 266（Deschutes，MMX，512 KB L2） |
 | 内存 | 24 MiB（基础档）/ 40 MiB（扩展档） | 64 MiB（32 板载 + 32 SO-DIMM），23 MiB 即可启动 |
 | 存储 | ~1 GiB IDE 硬盘 | 8.1 GB IDE 硬盘 + UltraBay II DVD-ROM |
-| 图形 | VGA 文本 | Trident Cyber9397DVD，14.1" 1024×768 TFT |
+| 图形 | VGA 文本 | Trident Cyber9397（4 MB SGRAM），14.1" 1024×768 TFT |
 | 扩展 | 16 位 PCMCIA | 2×Type II CardBus（TI PCI1250）+ USB 1.1 |
 | 内核风味 | 6.18.44 Pentium / legacy486 | 6.6.162（保 16 位 PCMCIA 无线），另有 6.18.44 可选 |
 | 用户空间基线 | **i486**（两条线共用） | **i486**（musl 1.2.5 + BusyBox + s6） |
@@ -52,30 +52,58 @@ Constellation OS 是一个面向老旧 x86 硬件的 Linux 发行版项目。其
 
 ## 状态
 
-早期设计阶段。**M1 可引导核心已跑通**：精简 LTS 内核（6.18.44）+
-musl i486 静态 BusyBox initramfs，QEMU 24 MiB 启动到 shell（见
-[kernel/NOTES.md](kernel/NOTES.md) 与 [busybox/NOTES.md](busybox/NOTES.md)）；
-**L1 内核层 + syslinux 引导已跑通**：IDE/libata + ext4 + DOS 分区，
-BIOS → MBR → SYSLINUX → bzImage → ext4 root → BusyBox PID 1（见
-kernel/NOTES.md）。**L2 外设已开工（仅 6.18.44）**：PCMCIA/i82365、
-8390 网卡（`NE2K_PCI` 等已改为模块并验证 `insmod` 后识别 `eth0`）、
-VGA fb 已编入/构建为模块；**L3 内存机制已跑通**：zram(lz4) + swap
-在 QEMU 下成功启用；**L4 用户空间契约已跑通**：BusyBox init + getty 在
-QEMU 下启动到 `(none) login:`。BusyBox 带 insmod/rmmod/lsmod/modprobe/mkswap/swapon/swapoff/free/getty/login。
-尚无发布用安装镜像；M2 的 s6-svscan + getty rootfs 模板已受追踪，硬盘启动
-仍待专用镜像验收。当前已通过的核心验收是 M1 initramfs 在 QEMU 中启动到 shell；
-受追踪的
-rootfs 模板和组装脚本已补齐（见 docs/m2-notes.md 与 BUILDING.md）。网络协议栈、
-DHCP 工具和模块加载路径已纳入配置，PCMCIA 联网仍待 86Box/真机验收。
+- **M1 核心**：精简 LTS 内核 + musl i486 静态 BusyBox initramfs，QEMU 24 MiB 启动到 shell。
+- **M2 最小系统**：s6-svscan + getty，硬盘（BIOS → MBR → 引导器 → bzImage → ext4 root）启动到 `login:`。
+- **770ED 风味**：可引导镜像 + 真机验证（见下节）。
+- **x61 风味**：64 位总线，见分支 `x61-amd64`。
+
+尚未发布安装器；镜像由脚本拼装后 `dd` 写盘（`scripts/install-disk-770ed.sh`）。
 
 ### 770ED 风味（2026-11）
 
-**770ED 已产出可引导镜像** `build/constellation-770ed.img`：Linux **6.6.162 LTS**
-（i686，bzImage 1.97 MiB）+ 137 个模块 + musl i486 BusyBox/s6，BIOS → MBR/GRUB2
-→ bzImage → ext4 root → s6-svscan → `login:` 在 QEMU 下逐条验收通过；23 MiB
-即可启动。驱动覆盖 Trident Cyber9397DVD（tridentfb）、CS4237B（snd-cs4236）、
-MWave 3780i、TI PCI1250 CardBus（yenta）、PIIX4 UHCI USB、APM 1.2、CS4237B 的
-`/dev/mixer` 音量控制，以及成组的
-PCMCIA/CardBus 外接卡驱动（16 位有线/串并口/CF/无线 + CardBus 网卡/无线/USB2）。
-缺 IrDA（上游 4.14 移除）、DEVA 硬解（从无驱动）与 MWave 用户态拨号栈；
-详见 [docs/thinkpad-770ed.md](docs/thinkpad-770ed.md)。
+**已产出两张可引导镜像**，都在真机（ThinkPad 770ED，PII 266 / 64 MiB）上验过启动：
+
+| 镜像 | 内核 | 内容 |
+|---|---|---|
+| `build/constellation-770ed-g4d.img` | Linux **6.6.162 LTS**（i686） | musl i486 + BusyBox 405 applet + s6 + Xorg/JWM + 开发工具 |
+| `build/constellation-770ed-lcars.img` | Linux **2.2.26**（`CONFIG_M686`） | [BasicLinux 3.5 LCARS](https://github.com/queenkjuul/basiclinux-lcars)，见 [doc §13](docs/thinkpad-770ed.md) |
+
+770ED 镜像的内容要点：
+
+- **引导**：grub4dos（`grldr.mbr` @ LBA0）。分区按 DOS 几何排：`p1` 从 **LBA 63**
+  起（FAT16/LBA，`hidden sectors=63`）、`p2` swap 256 MiB、`p3` ext4 根，全部对齐到
+  柱面（63 spt × 16 heads）。目标机上是 `/dev/sda1/2/3`（libata）。
+- **驱动**：`tridentfb`（1024×768-16 面板模式，走 `/etc/modprobe.d`）、`snd-cs4236`
+  + `snd-{mixer,pcm}-oss`（`/dev/mixer`、`/dev/dsp`）、`mwave`、TI PCI1250 双槽
+  CardBus（`yenta_socket`）、PIIX4 UHCI USB、APM 1.2、`ata_piix`，以及成组的
+  PCMCIA/CardBus 外接卡驱动（16 位有线/串并口/CF/无线 + CardBus 网卡/无线/USB2）。
+- **桌面**：自编 i486 X 栈（23 个库 + xorg-server 21.1.14 + JWM + st），
+  输入用 `kbd`/`mouse`（不用 evdev：它硬依赖 libudev）。
+- **零 SSE**：整份镜像按"不含 SSE/AVX/3DNow 指令"审计
+  （`scripts/audit-sse-770ed.sh`，PII 没有 SSE，Alpine 的 x86 包是 PIII 基线）。
+- **用户空间**：`sudo`（setuid 小助手 + `/etc/constellation/sudoers`）、
+  `poweroff`/`reboot` 走 s6 关停流程后直接 `reboot(2)`、U 盘插入自动挂
+  `/media/usb`、`osupdate` 从 U 盘的 `.upd` 增量更新（校验 + 备份 + 回滚）、
+  `fetch`（Mark + 概况）、`wifi`（b43/WPA2）、离线开发工具（`tcc`/`make`/binutils/
+  musl 头文件）、`mpg123`/`tone`/`fbset`/`lspci`、`ccode-cli`。
+
+构建与写盘（全部在 x86_64 Linux 宿主上交叉编译）：
+
+```sh
+KVER=6.6.162 scripts/build-core-770ed.sh            # 工具链 + busybox + 内核 + 模块
+sudo ROOT_PASSWORD_HASH="$(openssl passwd -6 'pw')" \
+     EXTRA_USERS="user:$ROOT_PASSWORD_HASH" scripts/build-rootfs-770ed.sh
+sudo GRUB4DOS=1 scripts/mkimage-770ed.sh            # → build/constellation-770ed-g4d.img
+sudo IMAGE=$PWD/build/constellation-770ed-g4d.img scripts/install-disk-770ed.sh /dev/sdX --grub4dos
+sudo sfdisk --activate /dev/sdX 1                   # 活动标志只留 p1
+```
+
+> build-rootfs / mkimage 需要 root：镜像里的文件属主必须是 `0:0`，`su`/`sudo`
+> 依赖 `/bin/busybox` 的 setuid 位。
+
+升级系统不必重刷：在目标机上 `osupdate`（读 U 盘上的 `constellation-*.upd`，
+先逐文件校验 sha256，再备份 + 原子替换，可用 `--rollback` 回退）。
+
+缺 IrDA（上游 4.14 移除）、DEVA 硬解（从无驱动）与 MWave 用户态拨号栈。
+详见 [docs/thinkpad-770ed.md](docs/thinkpad-770ed.md)（858 行，含逐项实测记录、
+内核裁剪踩坑、SSE 审计方法、BasicLinux LCARS 风味）。
