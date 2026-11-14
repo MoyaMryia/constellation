@@ -80,3 +80,11 @@ CONFIG_FEATURE_INSTALLER=y
 # cpuid 保护也不值得留 —— 直接关掉，审计才干净。
 # CONFIG_SHA1_HWACCEL is not set
 # CONFIG_SHA256_HWACCEL is not set
+
+# modprobe **必须**用完整版（不是 modprobe-small）。modprobe-small 不读
+# /etc/modprobe.d/*.conf，也不给模块传 options —— 实测后果：
+#   tridentfb 的 mode=1024x768-16@60 fp=1 被完全忽略，fb0 起来是 640x480-8bpp
+#   （dmesg: "tridentfb: 1024x768 flat panel found" 但 "frame buffer device 640x480-8bpp"）
+#   snd-cs4236 的 index/资源参数同理丢失。
+# CONFIG_MODPROBE_SMALL is not set
+CONFIG_MODPROBE=y
