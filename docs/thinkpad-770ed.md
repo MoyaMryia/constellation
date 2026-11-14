@@ -794,3 +794,65 @@ wpa_supplicant v2.10
 118
 ```
 
+## 16. 镜像里的离线开发工具：tcc + make + vi
+
+目标机不一定有网络，所以编译能力必须随镜像走。镜像里现在有：
+
+| 工具 | 大小 | 说明 |
+|---|---|---|
+| `tcc` | 220 KiB | Tiny C Compiler 0.9.27，C99 子集，自带链接器，**静态** |
+| `make` | 256 KiB | GNU Make 4.4.1，静态；PROLOGUE 是 i486 musl |
+| `vi` | — | BusyBox 的 vi（`CONFIG_VI=y`），已在镜像里 |
+| 头文件 | 1.7 MiB | musl 1.2.5 的 `/usr/include`（`stdio.h` 等） |
+| 库 | ~4.9 MiB | `/usr/lib/{libc.a,libgcc.a}`、`/usr/lib/tcc/libtcc1.a`、crt 文件 |
+
+用法（在 770ED 上）：
+
+```sh
+cat > hello.c <<'EOF'
+#include <stdio.h>
+int main(void) { printf("hello %d\n", 6 * 7); return 0; }
+EOF
+tcc -o hello hello.c && ./hello        # hello 42
+
+make                                    # 有 Makefile 时直接编
+vi file.c                               # BusyBox vi（:w :q :q! 都有）
+```
+
+实测（QEMU `-cpu pentium2 -m 64`）：
+
+```
+# tcc -v
+tcc version 0.9.27 (i386 Linux)
+# make -v
+GNU Make 4.4.1
+# tcc -o /tmp/h /tmp/h.c && /tmp/h
+hello 42
+```
+
+### 16.1 为什么不是 gcc
+
+原生 i486 gcc 要 `cc1` + `gcc` + binutils + 头文件 + `libgcc`，装完约 **40 MiB**，
+而且在 64 MiB 内存上编稍大的文件就会 OOM；PII 266 上更慢。真要 gcc，用宿主侧的
+交叉工具链（`toolchain/musl-i486`，`i486-linux-musl-gcc`）编好再拷进去。
+
+tcc 编单文件、配合 make 跑小项目足够，且二进制小、内存占用低。
+
+### 16.2 踩到的三个坑（写进脚本注释了）
+
+1. **crt 文件的位置**：tcc 用 `CONFIG_TCC_CRTPREFIX`（= `/usr/lib`）找
+   `crt1.o/crti.o/crtn.o` 和 `-lc` 的 `libc.a`，而 `libtcc1.a` 走
+   `CONFIG_TCCDIR`（= `/usr/lib/tcc`）。放错地方报
+   `tcc: error: file 'crt1.o' not found` —— 所以现在两边都放。
+2. **tcc 0.9.27 的 musl 分支把 32 位 x86 的解释器写成
+   `/lib/ld-musl-arm.so.1`**（`tcc.h` 里那个 `#elif !defined(TCC_ARM_EABI)` 分支）。
+   不改的话编出来的程序在目标机上直接 `not found`。脚本里用 `sed` 改成
+   `ld-musl-i386.so.1`。
+3. **64 位除法**：`__udivdi3/__udivmoddi4` 在 `libgcc.a` 里，tcc 不自带，
+   所以把宿主 32 位 `libgcc.a` 一起装进 `/usr/lib/`。
+
+另外 `configure` 必须显式 `--cpu=i386`：它默认用 `$cc -dumpmachine` 猜，
+在 x86_64 宿主上会得到 x86_64，进而编出 64 位 tcc。
+
+审计：`tcc`、`make` 的 `xmm/ymm` 计数均为 0（§12 那套脚本仍 ✅）。
+

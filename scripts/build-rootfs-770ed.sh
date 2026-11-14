@@ -211,6 +211,12 @@ if [ "$INSTALL_X" = 1 ]; then
     cp -a "$TMPL/lib/firmware/b43/." "$DEST/lib/firmware/b43/"
   fi
 
+  # 离线可用的开发工具：tcc（C 编译器）+ make + musl 头文件/静态库。
+  # 目标机可能没有网络，所以编译能力必须随镜像走。
+  if [ "${SKIP_DEVTOOLS:-0}" != 1 ]; then
+    ROOTFS_DEST="$DEST" JOBS="${JOBS:-4}" "$ROOT/scripts/build-devtools-770ed.sh" >/dev/null
+  fi
+
   # 无线工具：iwconfig/iwlist（wireless-tools）+ wpa_supplicant（wext + internal TLS），
   # 都用本工程 i486 musl 工具链编（Alpine 的是 SSE 基线）。
   if [ "${SKIP_WIRELESS:-0}" != 1 ]; then
