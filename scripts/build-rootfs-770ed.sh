@@ -240,8 +240,16 @@ if [ "$INSTALL_X" = 1 ]; then
   fi
 
   # ccode-cli（可选：设 CCODE=1 且源码目录存在时编译安装）
-  if [ "${CCODE:-0}" = 1 ] && [ -d "${CCODE_SRC:-$HOME/Projects/agents/ccode/ccode}/src" ]; then
-    "$ROOT/scripts/build-ccode-770ed.sh" --install >/dev/null 2>&1 || \
+  # 默认就带：源码存在就编译安装（它很小，685 KB，静态）
+  # 注意 SUDO_USER：build-rootfs 要 root，sudo 之后 $HOME 变成 /root，
+  # 源码目录得从原用户的家目录找。
+  ccode_src=${CCODE_SRC:-}
+  if [ -z "$ccode_src" ] && [ -n "${SUDO_USER:-}" ]; then
+    ccode_src=$(getent passwd "$SUDO_USER" 2>/dev/null | cut -d: -f6)/Projects/agents/ccode/ccode
+  fi
+  [ -n "$ccode_src" ] || ccode_src=$HOME/Projects/agents/ccode/ccode
+  if [ "${CCODE:-1}" = 1 ] && [ -d "$ccode_src/src" ]; then
+    CCODE_SRC=$ccode_src "$ROOT/scripts/build-ccode-770ed.sh" --install >/dev/null 2>&1 || \
       echo "build-rootfs: ccode 编译失败（跳过）" >&2
   fi
 
