@@ -11,11 +11,29 @@
 set -e
 export PATH=/usr/bin:/usr/sbin:/bin:/sbin
 
+# The X server needs to open /dev/fb0, /dev/tty2 and /dev/input/* and to create
+# /tmp/.X11-unix -- none of that works as a normal user. Re-exec through sudo
+# instead of failing with a confusing "no /dev/fb0" message.
+if [ "$(id -u)" != 0 ]; then
+  if [ -x /usr/bin/sudo ]; then
+    echo "x: not root, re-running under sudo ..."
+    exec /usr/bin/sudo /usr/bin/x "$@"
+  fi
+  echo "x: must be run as root (try: sudo x)" >&2
+  exit 1
+fi
+
 CONF=/tmp/xorg.conf
 
 if [ ! -e /dev/fb0 ]; then
-  echo "x: no /dev/fb0 (tridentfb not loaded, or failed to load)."
-  echo "x: check dmesg | grep -i trident, or run modprobe tridentfb and retry."
+  echo "x: no /dev/fb0 -- the framebuffer device is missing." >&2
+  if grep -q tridentfb /proc/modules 2>/dev/null; then
+    echo "x: tridentfb IS loaded, so the driver did not create a framebuffer." >&2
+    echo "x: check dmesg | grep -i -e trident -e fb0" >&2
+  else
+    echo "x: tridentfb is not loaded. Try: modprobe tridentfb" >&2
+    echo "x: then check dmesg | grep -i trident (mode=/fp= live in /etc/modprobe.d/tridentfb.conf)" >&2
+  fi
   exit 1
 fi
 
