@@ -54,7 +54,7 @@ sudo scripts/install-disk-770ed.sh /dev/sdX --grub4dos
 | `docs/` | 设计、内存预算、风味笔记、770ED 实测记录 |
 | `tools/` | 独立 C 源码（`mixer.c`、`tone.c`、`dosudo.c`、`dopower.c`、`probe.c`） |
 | `third_party/` | 上游补丁，保持被补丁项目的许可 |
-| `.claude/`、`CLAUDE.md` | 拒绝在 Claude Code 下工作的阻断配置与声明 |
+| `.claude/`、`CLAUDE.md` | 拒用声明 |
 
 ## 目标机不可回退的硬约束
 
