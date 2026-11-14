@@ -46,11 +46,19 @@ chmod 0755 "$DEST/bin/busybox"
 
 # applet 软链：以二进制自己报告的 applet 表为准，避免"配了 applet 但
 # 名字对不上 → applet not found"这类静默偏差。`[` 不在表里，ash 内建提供。
-for applet in $("$BB_BIN" --list); do
+applets=$("$BB_BIN" --list 2>/dev/null | tr '\n' ' ')
+for applet in $applets; do
   case "$applet" in
     '['|linuxrc) continue ;;
   esac
   ln -sf busybox "$DEST/bin/$applet"
+done
+# 自检：没有 /bin/sh、/bin/ls 的镜像是废的（busybox 没开 FEATURE_INSTALLER 时
+# `--list` 会输出空，软链一条都建不出来，而构建过程不会报错）。
+for must in sh ls cat mount vi; do
+  [ -L "$DEST/bin/$must" ] || [ -e "$DEST/bin/$must" ] || {
+    echo "build-rootfs: /bin/$must 缺失（busybox --list 给了 $(echo "$applets" | wc -w) 个 applet）" >&2
+    exit 1; }
 done
 # BusyBox 的 applet 按调用名分派，但 init/getty 之类的惯例位置仍是 /sbin。
 # 注意：不要给 init 建软链——下面的 cp 会把模板 init 写穿到这个软链上，
@@ -221,6 +229,12 @@ if [ "$INSTALL_X" = 1 ]; then
   # Linux UAPI 头（写 C 程序时 #include <linux/...> 要用）
   if [ "${SKIP_USERSPACE:-0}" != 1 ]; then
     ROOTFS_DEST="$DEST" JOBS="${JOBS:-4}" "$ROOT/scripts/build-userspace-770ed.sh" >/dev/null
+  fi
+
+  # ccode-cli（可选：设 CCODE=1 且源码目录存在时编译安装）
+  if [ "${CCODE:-0}" = 1 ] && [ -d "${CCODE_SRC:-$HOME/Projects/agents/ccode/ccode}/src" ]; then
+    "$ROOT/scripts/build-ccode-770ed.sh" --install >/dev/null 2>&1 || \
+      echo "build-rootfs: ccode 编译失败（跳过）" >&2
   fi
 
   # 无线工具：iwconfig/iwlist（wireless-tools）+ wpa_supplicant（wext + internal TLS），

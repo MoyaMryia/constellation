@@ -130,16 +130,42 @@ fi
 if [ ! -d "$BUSYBOX_SRC" ]; then
   tar -C "$ROOT/busybox/src" -xf "$ROOT/busybox/src/busybox-1.38.0.tar.bz2"
 fi
-cp "$ROOT/busybox/configs/busybox-1.38.0-M1.config" "$BUSYBOX_SRC/.config"
+# 基线：默认用 busybox 自己的 defconfig（几乎全开，~380 个 applet）。
+# 之前用的是 M1 的最小配置（只有 ~50 个 applet：没有 cp/rm/sed/awk/grep/
+# find/vi/ps/tar…），拼上 770ED 的 fragment 也补不齐 —— 那会儿还有 amd64
+# 的另一份 fragment 提供"通用命令行工具集"，本分支没有它。结果就是镜像
+# 用起来像个 rescue shell。
+# BB_BASE=m1 可以退回老行为（做极小镜像时用）。
+if [ "${BB_BASE:-defconfig}" = m1 ]; then
+  cp "$ROOT/busybox/configs/busybox-1.38.0-M1.config" "$BUSYBOX_SRC/.config"
+else
+  make -s -C "$BUSYBOX_SRC" HOSTCC="$HOSTCC" defconfig
+fi
 # 同一符号出现两次时 Kconfig 取先出现的那条，故先删后追加。
 for frag in $BB_FRAGMENTS; do
-  for s in $(grep -E '^CONFIG_' "$frag" | cut -d= -f1); do
+  # fragment 里可以写 `# CONFIG_X is not set` 来**关掉**某个符号（defconfig 基线
+  # 会打开不少用不上的东西，比如 SHA-NI 硬件加速）。
+  for s in $(grep -E '^(CONFIG_[A-Z0-9_]+=|# CONFIG_[A-Z0-9_]+ is not set)' "$frag" \
+             | sed 's/^# //; s/[= ].*//'); do
     sed -i "/^$s=/d; /^# $s is not set\$/d" "$BUSYBOX_SRC/.config"
   done
-  grep -E '^CONFIG_' "$frag" >> "$BUSYBOX_SRC/.config"
+  grep -E '^(CONFIG_|# CONFIG_)' "$frag" >> "$BUSYBOX_SRC/.config"
 done
 yes "" | make -s -C "$BUSYBOX_SRC" HOSTCC="$HOSTCC" oldconfig >/dev/null
-make -s -C "$BUSYBOX_SRC" -j"$JOBS" HOSTCC="$HOSTCC" CC="$CC_WRAP"
+
+# defconfig 里有些 applet（kbd_mode / loadfont / …）要 <linux/kd.h> 这类
+# UAPI 头，musl 自己不带。用内核树生成的一份（与目标内核版本一致）。
+UAPI=$ROOT/build/uapi-770ed/include
+if [ ! -f "$UAPI/linux/kd.h" ]; then
+  ( cd "$KERNEL_SRC" && make -s ARCH=i386 HOSTCC="$HOSTCC" headers_install \
+      INSTALL_HDR_PATH="$ROOT/build/uapi-770ed" >/dev/null 2>&1 )
+fi
+# 配置/CFLAGS 变了 make 不会自动重编（只按时间戳）：必须 clean，
+# 否则 -mno-sse 不生效，libbb/bitops.c 里的 SSE 内联汇编会留在二进制里
+# （实测 291 条 movups/xorps，PII 上 SIGILL）。
+make -s -C "$BUSYBOX_SRC" clean >/dev/null 2>&1 || true
+make -s -C "$BUSYBOX_SRC" -j"$JOBS" HOSTCC="$HOSTCC" CC="$CC_WRAP" \
+  EXTRA_CFLAGS="-I$UAPI"
 "$MUSL_PREFIX/bin/i486-linux-musl-strip" "$BUSYBOX_SRC/busybox"
 cp "$BUSYBOX_SRC/.config" "$ROOT/busybox/configs/busybox-1.38.0-770ed.config"
 

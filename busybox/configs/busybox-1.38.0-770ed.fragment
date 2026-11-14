@@ -7,6 +7,13 @@
 #
 # 应用顺序见 scripts/build-core-770ed.sh：M1 → amd64 fragment → 本文件。
 
+# 静态链接（defconfig 默认是动态；镜像里没有 ld.so 供 busybox 用）
+CONFIG_STATIC=y
+# 目标 CPU 是 Pentium II：没有 SSE/SSE2/3DNow。defconfig 基线不带这些开关，
+# 缺了它 gcc 会按宿主默认（i686+）生成代码，实测 busybox 里混进 291 条 xmm
+# 指令（sha256sum 之类），PII 上直接 SIGILL。
+CONFIG_EXTRA_CFLAGS="-Os -march=i486 -mno-sse -mno-sse2 -mno-mmx -mno-3dnow -fno-stack-protector"
+
 # --- 设备节点与热插拔 ---
 # devtmpfs 已经给出静态节点；mdev 补的是冷插拔（启动时已插入的 CardBus
 # 卡）与后续 mdev -s 的 /dev 补齐。
@@ -57,3 +64,19 @@ CONFIG_FDISK=y
 CONFIG_LOGGER=y
 CONFIG_CROND=y
 CONFIG_SYSCTL=y
+
+# `busybox --list` / `busybox --install` 需要它。build-rootfs 靠 --list 生成
+# /bin/* 的 applet 软链，没有这个开关就一条软链都建不出来 —— 镜像里会没有
+# /bin/sh、/bin/ls，登录后直接"没有 shell"。
+# BUSYBOX 这个"applet"本身必须开：它提供 `busybox --list/--install/--help`
+# 这条多路复用入口，同时 FEATURE_INSTALLER 依赖它。M1 配置里是关的（M1 只把
+# busybox 当 init 用），于是 build-rootfs 的 `busybox --list` 输出为空 →
+# /bin 下一条 applet 软链都建不出来 → 镜像里没有 /bin/sh、/bin/ls。
+CONFIG_BUSYBOX=y
+CONFIG_FEATURE_INSTALLER=y
+
+# SHA-NI 硬件加速：代码用 __attribute__((target("sha,sse4.1"))) 编，二进制里
+# 会有 movups/xorps/pinsrd（实测 291 条）。PII 没有这些指令，运行期即便有
+# cpuid 保护也不值得留 —— 直接关掉，审计才干净。
+# CONFIG_SHA1_HWACCEL is not set
+# CONFIG_SHA256_HWACCEL is not set
