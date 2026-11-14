@@ -91,7 +91,7 @@ rm -f "$DEST/sbin/init" "$DEST/sbin/hotplug"
 cp "$TMPL/sbin/init" "$DEST/sbin/init"
 cp "$TMPL/sbin/hotplug" "$DEST/sbin/hotplug"
 cp "$TMPL/usr/sbin/hwcheck" "$DEST/usr/sbin/hwcheck"
-for svc in getty-console getty-serial udhcpc; do
+for svc in getty-console getty-serial udhcpc usbautomount; do
   mkdir -p "$DEST/etc/s6/$svc"
   cp "$TMPL/etc/s6/$svc/run" "$DEST/etc/s6/$svc/run"
 done
@@ -288,11 +288,12 @@ cp "$TMPL/usr/bin/apm" "$DEST/usr/bin/apm"
 cp "$TMPL/usr/bin/sudo" "$DEST/usr/bin/sudo"
 mkdir -p "$DEST/usr/sbin"
 cp "$TMPL/usr/sbin/osupdate" "$DEST/usr/sbin/osupdate"
+cp "$TMPL/usr/sbin/usbautomount" "$DEST/usr/sbin/usbautomount"
 cp "$TMPL"/usr/share/constellation/*.txt "$DEST/usr/share/constellation/"
 cp "$TMPL/etc/motd" "$DEST/etc/motd"
 chmod 0755 "$DEST/usr/bin/fetch" "$DEST/usr/bin/mountusb" "$DEST/usr/bin/tone" \
   "$DEST/usr/bin/wifi" "$DEST/usr/bin/apm" "$DEST/usr/bin/sudo" \
-  "$DEST/usr/sbin/osupdate"
+  "$DEST/usr/sbin/osupdate" "$DEST/usr/sbin/usbautomount"
 
 # ---- 电源管理：覆盖 busybox 的 poweroff/reboot/halt ----
 # busybox 的这三个 applet 假设 PID 1 是 busybox init，只给 PID 1 发信号；

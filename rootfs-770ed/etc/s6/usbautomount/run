@@ -1,0 +1,3 @@
+#!/bin/sh
+# s6 service: poll for USB sticks and mount them on /media/usb.
+exec /usr/sbin/usbautomount

@@ -69,7 +69,12 @@ done
 #   snd-mixer-oss -- provides /dev/mixer for /bin/mixer volume control
 #   snd-pcm-oss   -- provides /dev/dsp and /dev/audio (needed by mpg123/tone)
 #   ppp_generic   -- creates /dev/ppp (modem character device, no bus modalias)
-for m in tridentfb snd-cs4236 snd-mixer-oss snd-pcm-oss floppy zram ppp_generic; do
+# usbhid / usb-storage / uas must be loaded up front: there is no udev here.
+# The uevent helper is only used by the coldplug modalias loop below, so a stick
+# or keyboard plugged in at runtime has nothing to modprobe for it -- if the
+# module is not loaded, the device is never bound.
+for m in tridentfb snd-cs4236 snd-mixer-oss snd-pcm-oss floppy zram ppp_generic \
+         usbhid usb-storage uas; do
   /sbin/modprobe -q "$m" 2>/dev/null || true
 done
 

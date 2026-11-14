@@ -1,0 +1,79 @@
+#!/bin/sh
+# usbautomount -- poll for a removable USB stick and mount it on /media/usb.
+#
+# Why polling instead of uevents: the kernel's uevent helper (/sbin/hotplug) is
+# a one-shot process per event and its environment differs between kernel
+# versions (DEVTYPE/DEVNAME presence), which makes reliable automounting fiddly.
+# A 2-second poll of /sys/block costs nothing here and is predictable.
+set -u
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+MNT=/media/usb
+INTERVAL=${USBAUTOMOUNT_INTERVAL:-2}
+
+rootname=
+rootdev=$(awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^root=/) { sub(/^root=/, "", $i); print $i; exit } }' /proc/cmdline 2>/dev/null)
+case $rootdev in /dev/sd?*) rootname=$(echo "$rootdev" | sed 's|/dev/\(sd[a-z]\).*|\1|') ;; esac
+
+
+# busybox blkid does NOT support "blkid -o value -s TYPE" (that is util-linux);
+# it just prints "/dev/sdb1: LABEL=... TYPE=vfat", which used to be fed to
+# "mount -t <garbage>". Parse the TYPE= field ourselves.
+fs_type() {
+  blkid "$1" 2>/dev/null | tr ' ' '\n' | sed -n 's/^TYPE="\(.*\)"$/\1/p' | head -n 1
+}
+
+mount_dev() {  # mount_dev <device>
+  dev=$1
+  [ -b "$dev" ] || return 1
+  grep -q "^$dev " /proc/mounts && return 0
+  mkdir -p "$MNT" 2>/dev/null || return 1
+  type=$(fs_type "$dev")
+  case $type in
+    # vfat: use utf8=1 (kernel-internal UTF-8), NOT iocharset=utf8 -- the
+    # latter needs the nls_utf8 module, which this image does not ship:
+    #   FAT-fs (sdb1): IO charset utf8 not found   -> mount fails
+    vfat|fat|msdos) set -- -t vfat -o utf8=1,umask=022 ;;
+    exfat)          set -- -t exfat -o umask=022 ;;
+    ntfs)           set -- -t ntfs -o umask=022 ;;
+    ext2|ext3|ext4) set -- -t "$type" ;;
+    *)              set -- "" ;;
+  esac
+  if mount "$@" "$dev" "$MNT" 2>/dev/null; then
+    echo "usbautomount: $dev on $MNT"
+    return 0
+  fi
+  # Fall back to a read-only mount: when the medium itself is read-only (write
+  # protect switch, read-only image, some card readers) the rw mount fails and
+  # this case used to be skipped silently.
+  if mount -o ro "$@" "$dev" "$MNT" 2>/dev/null; then
+    echo "usbautomount: $dev on $MNT (read-only)"
+    return 0
+  fi
+  echo "usbautomount: cannot mount $dev${type:+ (type=$type)}" >&2
+  return 1
+}
+
+while :; do
+  mounted=$(awk -v m="$MNT" '$2 == m { print $1; exit }' /proc/mounts 2>/dev/null)
+
+  if [ -n "$mounted" ]; then
+    if [ ! -b "$mounted" ]; then
+      sync
+      umount "$MNT" 2>/dev/null
+      rmdir "$MNT" 2>/dev/null
+      echo "usbautomount: $mounted removed, unmounted"
+    fi
+    sleep "$INTERVAL"
+    continue
+  fi
+
+  for d in /sys/block/sd*; do
+    [ -e "$d" ] || continue
+    name=${d##*/}
+    [ "$name" = "$rootname" ] && continue
+    for n in 1 2 3 4; do
+      mount_dev "/dev/${name}${n}" && break
+    done
+  done
+  sleep "$INTERVAL"
+done

@@ -10,6 +10,16 @@ set -u
 PATH=/bin:/sbin:/usr/bin:/usr/sbin
 MNT=/media/usb
 
+# mounting needs root. Running as a normal user used to fail with a cryptic
+# "mount: permission denied" -- re-exec ourselves through sudo instead.
+if [ "$(id -u)" != 0 ]; then
+  if [ -x /usr/bin/sudo ]; then
+    exec /usr/bin/sudo /usr/bin/mountusb "$@"
+  fi
+  echo "mountusb: needs root (try: sudo mountusb)" >&2
+  exit 1
+fi
+
 umount_usb() {
   if mountpoint -q "$MNT" 2>/dev/null; then
     sync
@@ -60,10 +70,12 @@ fi
 mkdir -p "$MNT"
 [ -d "$MNT" ] || { echo "mountusb: cannot create $MNT" >&2; exit 1; }
 
-type=$(blkid -o value -s TYPE "$dev" 2>/dev/null || echo "")
+# busybox blkid has no "-o value -s TYPE"; parse TYPE="..." out of its default output
+type=$(blkid "$dev" 2>/dev/null | tr ' ' '\n' | sed -n 's/^TYPE="\(.*\)"$/\1/p' | head -n 1)
 case $type in
-  vfat|fat|msdos) opts="-t vfat -o iocharset=utf8,umask=022" ;;
-  exfat)          opts="-t exfat -o iocharset=utf8,umask=022" ;;
+  # utf8=1 instead of iocharset=utf8: the latter needs nls_utf8 (not shipped)
+  vfat|fat|msdos) opts="-t vfat -o utf8=1,umask=022" ;;
+  exfat)          opts="-t exfat -o umask=022" ;;
   ntfs)           opts="-t ntfs -o umask=022" ;;
   ext2|ext3|ext4) opts="-t $type" ;;
   *)              opts="" ; type="auto" ;;
