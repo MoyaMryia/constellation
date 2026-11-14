@@ -1,6 +1,6 @@
 #!/bin/sh
-# ThinkPad 770ED 硬件自检报告。在目标机上直接跑：hwcheck
-# 每个小节对应 docs/thinkpad-770ed.md 里的一项验收。
+# ThinkPad 770ED hardware self-check report. Run it on the target: hwcheck
+# Each section corresponds to one acceptance item in docs/thinkpad-770ed.md.
 export PATH=/bin:/sbin:/usr/bin:/usr/sbin
 
 sec () { echo; echo "== $* =="; }
@@ -33,7 +33,7 @@ cat /proc/fb 2>/dev/null || echo "no /proc/fb"
 command -v fbset >/dev/null 2>&1 && fbset 2>/dev/null | head -n 8
 
 sec sound
-cat /proc/asound/cards 2>/dev/null || echo "no /proc/asound (snd-cs4236 未加载或未探测到 CS4237B)"
+cat /proc/asound/cards 2>/dev/null || echo "no /proc/asound (snd-cs4236 not loaded, or no CS4237B detected)"
 cat /proc/asound/devices 2>/dev/null | head -n 5
 
 sec firmware
@@ -41,13 +41,13 @@ ls /lib/firmware 2>/dev/null || echo "no /lib/firmware"
 
 sec storage
 cat /proc/partitions
-echo "-- PCMCIA/CF 转接卡应表现为 sdX（pata_pcmcia），插卡后看 dmesg"
+echo "-- a PCMCIA/CF adapter should show up as sdX (pata_pcmcia); check dmesg after inserting"
 
 sec modem
-ls /dev/modems 2>/dev/null || echo "MWave 未初始化（见 /etc/modprobe.d/mwave.conf）"
+ls /dev/modems 2>/dev/null || echo "MWave not initialised (see /etc/modprobe.d/mwave.conf)"
 
 sec apm
-cat /proc/apm 2>/dev/null || echo "no APM（内核未带 APM 或 BIOS 未提供）"
+cat /proc/apm 2>/dev/null || echo "no APM (kernel built without APM, or the BIOS does not provide it)"
 
 sec interrupts
 cat /proc/interrupts

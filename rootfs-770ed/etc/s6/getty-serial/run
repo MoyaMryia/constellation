@@ -1,9 +1,9 @@
 #!/bin/sh
-# 串口登录。770ED 机身后面有一个 9 针串口（NS PC97338 SuperI/O），但它在
-# BIOS 里可能被关掉、也可能被枚举成 ttyS1（COM2）——所以这里按顺序找一个
-# "真端口"：/sys/class/tty/ttySX/type 非 0 才算真的 8250 端口。
+# Serial login. The 770ED has one 9-pin serial port (NS PC97338 SuperI/O), but
+# it may be disabled in BIOS or may enumerate as ttyS1 (COM2), so look for the
+# first *real* port: /sys/class/tty/ttySX/type must be non-zero (a real 8250).
 #
-# 串口参数 115200 8N1，无流控；用 null-modem 线接另一台机器即可登录。
+# 115200 8N1, no flow control. Use a null-modem cable to another machine.
 for n in 0 1 2 3; do
   t=/dev/ttyS$n
   [ -c "$t" ] || continue
@@ -11,5 +11,5 @@ for n in 0 1 2 3; do
   [ "${type:-0}" = 0 ] && continue
   exec /bin/getty -L "ttyS$n" 115200 vt100
 done
-# 没有可用串口（纯本机场景）：安静地睡，不刷日志
+# No usable serial port (local-only machine): sleep quietly, do not spam logs.
 exec /bin/sleep 3600

@@ -14,6 +14,10 @@ BB_BIN=$ROOT/busybox/src/busybox-1.38.0/busybox
 S6_ROOT=${M2_INSTALL_DIR:-$ROOT/build/m2root}
 MODROOT=${MODROOT:-$ROOT/build/modroot-770ed}
 TMPL=$ROOT/rootfs-770ed
+
+# 目标机没有 CJK 字体（VGA 文本控制台 + 西文 X 字体），模板里混进中文就是乱码。
+# 在动手之前先拦一道，别等打完镜像才发现。中文请写在 scripts/、docs/ 里。
+"$ROOT/scripts/check-ascii-770ed.sh" "$TMPL" >/dev/null
 PASSWORD=${ROOT_PASSWORD_HASH:-!}
 # 额外账号：EXTRA_USERS="name:$6$hash name2:$6$hash2"（空格分隔）。
 # 明文口令不要写进仓库；构建时用

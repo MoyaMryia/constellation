@@ -1,6 +1,7 @@
 #!/bin/sh
-# xinit 会话：直接以 JWM 作为会话主进程（JWM 是我们自己用 musl i486 编的，
-# 二进制里 SSE 指令为 0）。不再默认拉起 xterm/xrdb —— 它们是 Alpine 的
-# Pentium III 基线二进制，在 PII 上会 SIGILL；需要终端时装一个自编的即可
-# （见 docs/thinkpad-770ed.md §6.1）。
+# xinit session: run JWM directly as the session's main process (JWM is built
+# here from musl i486 sources; the binary contains zero SSE instructions).
+# We do not pull in xterm/xrdb by default: those are Alpine Pentium III (SSE)
+# baseline binaries and fault with SIGILL on a PII. Install a self-built
+# terminal if you need one (see docs/thinkpad-770ed.md section 6.1).
 exec /usr/bin/jwm -f /etc/jwm/jwmrc

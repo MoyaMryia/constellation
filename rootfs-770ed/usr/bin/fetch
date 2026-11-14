@@ -1,32 +1,35 @@
 #!/bin/sh
-# Constellation 的 fetch：左边 Mark（拼色 * 号），右边系统信息。
+# Constellation fetch: mark (multi-colour asterisk) on the left, system info
+# on the right.
 #
-# 为什么是 shell 而不是真 fastfetch：这台机器是 PII 266 / 64 MiB，而且
-# 整个镜像按"不许出现 SSE 指令"的标准审计过（scripts/audit-sse-770ed.sh）。
-# fastfetch 的构建产物在 32 位 x86 上会带 SSE（memcpy/自动向量化），要它就得
-# 再维护一条 i486 构建线；而 Mark 本身只是一张 14 行 ASCII 图 + 颜色，用
-# busybox 的 awk 拼两栏就够了，零字节二进制、零 SSE 风险。
+# Why a shell script instead of real fastfetch: this is a PII 266 with 64 MiB,
+# and the whole image is audited for "no SSE instructions"
+# (scripts/audit-sse-770ed.sh). fastfetch binaries carry SSE on 32-bit x86
+# (memcpy / auto-vectorisation), which would mean maintaining another i486
+# build line; the mark itself is only 14 lines of ASCII art plus colour, so
+# busybox awk can lay out the two columns. No binary, no SSE risk.
 #
-# 环境变量：
-#   FETCH_LOGO=/path   指定别处的 logo（默认按终端能力自动挑）
-#   NO_COLOR=1         不输出颜色
+# Environment:
+#   FETCH_LOGO=/path   use a logo from elsewhere (default: pick by terminal)
+#   NO_COLOR=1         do not emit colour
 set -u
 
 SELF_DIR=${CONSTELLATION_SHARE:-/usr/share/constellation}
 
-# ---- 1) 选 logo：VGA 文本控制台只认 16 色，真彩色序列会被原样打印 ----
+# ---- 1) pick a logo: the VGA text console only does 16 colours, a truecolor
+#         escape sequence would be printed literally ----
 logo=$SELF_DIR/logo.txt
 case ${TERM:-} in
   linux|dumb) logo=$SELF_DIR/logo16.txt ;;
 esac
 if [ -n "${FETCH_LOGO:-}" ]; then logo=$FETCH_LOGO; fi
 
-# ---- 2) 采集信息 ----
+# ---- 2) collect information ----
 hostn=$(cat /etc/hostname 2>/dev/null || uname -n)
 [ -n "$hostn" ] || hostn=constellation
 who=${USER:-$(id -un 2>/dev/null || echo root)}
 
-read_val() { # read_val <file> <key> -> 冒号后面的第一个字段
+read_val() { # read_val <file> <key> -> first field after the colon
   awk -v k="$2" -F: '$1 == k { gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2; exit }' "$1" 2>/dev/null
 }
 
@@ -50,9 +53,10 @@ swap=$(awk '/^SwapTotal:/ { t = $2 } /^SwapFree:/ { f = $2 }
             END { if (t > 0) printf "%d MiB / %d MiB", (t - f) / 1024, t / 1024 }' \
        /proc/meminfo 2>/dev/null)
 
-up=$(awk '{ printf "%d 分钟", $1 / 60 }' /proc/uptime 2>/dev/null)
+up=$(awk '{ printf "%d min", $1 / 60 }' /proc/uptime 2>/dev/null)
 
-# 显示环境：有 X 就看窗口管理器是谁（busybox ps 的行尾是参数，得挑出程序名本身）
+# Display environment: if X is running, find out which WM it is (busybox ps
+# puts arguments at the end of the line, so pick the program name itself)
 wm=$(ps 2>/dev/null | awk '
   {
     for (i = 1; i <= NF; i++) {
@@ -66,8 +70,8 @@ wm=$(ps 2>/dev/null | awk '
   END { if (seen != "" && !found) print seen }
 ')
 case ${wm:-} in
-  jwm|icewm|twm) desk="X11（$wm）" ;;
-  Xvesa|Xorg)    desk="X11（$wm）" ;;
+  jwm|icewm|twm) desk="X11 ($wm)" ;;
+  Xvesa|Xorg)    desk="X11 ($wm)" ;;
   *)             desk="tty" ;;
 esac
 
@@ -89,13 +93,13 @@ trap cleanup EXIT HUP INT TERM
   printf 'Disk:    %s\n' "$(df -h / 2>/dev/null | awk 'NR == 2 { printf "%s / %s (%s)", $3, $2, $5 }')"
 } > "$info" 2>/dev/null
 
-# ---- 3) 两栏合并：按"可见宽度"（去掉 ANSI 序列后）算 Padding ----
+# ---- 3) merge the two columns: pad by *visible* width (ANSI stripped) ----
 if [ ! -s "$info" ]; then
   cat "$logo" 2>/dev/null
   exit 0
 fi
 awk '
-  NR == FNR {          # 第一遍：logo
+  NR == FNR {          # first pass: the logo
     art[FNR] = $0
     s = $0; gsub(/\033\[[0-9;]*m/, "", s)
     if (length(s) > w) w = length(s)

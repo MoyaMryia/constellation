@@ -1,21 +1,21 @@
 #!/bin/sh
-# 在 VT2 上启动 Xorg + JWM（VT1 留给 getty 登录）。
+# Start Xorg + JWM on VT2 (VT1 is left to getty).
 #
-# 不走 xinit：xinit 会调 mcookie/xauth 建 cookie，而那两个是 Alpine 的
-# Pentium III(SSE) 二进制。本机是本地显示，不需要授权 cookie，直接起服务器
-# 更省依赖也更可靠。
+# No xinit: xinit shells out to mcookie/xauth to build a cookie, and both are
+# Alpine Pentium III (SSE) binaries. This is a local display, no auth cookie is
+# needed, and starting the server directly is both leaner and more reliable.
 #
-# 视频驱动二选一：
-#   /dev/fb0 存在 → fbdev（真机走这里：tridentfb 已把 9397 设成 1024x768）
-#   否则          → 直接报错退出（QEMU 纯文本引导下没有帧缓冲）
+# Video driver: /dev/fb0 present -> fbdev (real hardware goes this way;
+# tridentfb has already put the 9397 into 1024x768). Otherwise exit with an
+# error (a plain text-mode QEMU boot has no framebuffer).
 set -e
 export PATH=/usr/bin:/usr/sbin:/bin:/sbin
 
 CONF=/tmp/xorg.conf
 
 if [ ! -e /dev/fb0 ]; then
-  echo "x: 没有 /dev/fb0（tridentfb 未加载或加载失败）。"
-  echo "x: 先看 dmesg | grep -i trident；或 modprobe tridentfb 后再试。"
+  echo "x: no /dev/fb0 (tridentfb not loaded, or failed to load)."
+  echo "x: check dmesg | grep -i trident, or run modprobe tridentfb and retry."
   exit 1
 fi
 
@@ -40,7 +40,8 @@ EndSection
 
 Section "Monitor"
     Identifier "Panel"
-    # 面板允许的同步范围：取自 1998 年那台 770 上跑 XFree86 的 XF86Config
+    # Sync ranges the panel accepts: taken from the XF86Config that ran
+    # XFree86 on a 770 back in 1998
     HorizSync   31.5 - 57.0
     VertRefresh 50.0 - 100.0
     Option "DPMS" "false"
@@ -62,8 +63,9 @@ Section "Screen"
     EndSubSection
 EndSection
 
-# 输入用 kbd + mouse（老式、走 /dev/ttyX 与 /dev/input/mice），不用 evdev：
-# evdev 硬依赖 libudev，而 eudev 也是 SSE 基线（实测 SIGILL）。
+# Input uses kbd + mouse (the classic drivers, via /dev/ttyX and
+# /dev/input/mice) rather than evdev: evdev hard-depends on libudev, and eudev is
+# SSE baseline too (measured SIGILL).
 Section "InputDevice"
     Identifier "Keyboard0"
     Driver "kbd"
@@ -84,26 +86,27 @@ mkdir -p /tmp/.X11-unix /var/log
 chmod 1777 /tmp/.X11-unix 2>/dev/null || true
 rm -f /tmp/.X0-lock /tmp/.X11-unix/X0 2>/dev/null || true
 
-# Xorg 21 的权限检查：以 root 运行时 -config 只接受相对路径
+# Xorg 21 permission check: when running as root, -config only accepts a
+# relative path
 cd /tmp || exit 1
 /usr/bin/Xorg :0 -config xorg.conf -logfile /tmp/X.log -nolisten tcp vt2 &
 XPID=$!
 
-# 等 socket 就绪（最多 10 秒）。注意：不用 $((...))——这个 busybox 的 ash
-# 没编数学展开（CONFIG_ASH_MATH_SUPPORT 关着），一用就报
-# "support for $((arith)) is disabled" 然后整个脚本退出。
+# Wait for the socket (up to 10 seconds). Note: no $((...)) here -- this
+# busybox ash was built without arithmetic expansion (CONFIG_FEATURE_SH_MATH
+# off in older configs) and would abort the whole script.
 for _ in 1 2 3 4 5 6 7 8 9 10; do
   [ -e /tmp/.X11-unix/X0 ] && break
   sleep 1
 done
 if [ ! -e /tmp/.X11-unix/X0 ]; then
-  echo "x: X 服务器没起来，见 /tmp/X.log"
+  echo "x: X server did not come up, see /tmp/X.log"
   exit 1
 fi
 
 export DISPLAY=:0
 /usr/bin/jwm -f /etc/jwm/jwmrc
 
-# JWM 退出 → 收掉服务器，回到 getty 所在的 VT1
+# JWM exited -> shut the server down and return to VT1 (where getty lives)
 kill "$XPID" 2>/dev/null || true
 chvt 1 2>/dev/null || true

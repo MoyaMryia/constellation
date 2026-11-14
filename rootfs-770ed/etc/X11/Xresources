@@ -1,3 +1,3 @@
-! IceWM 之外的 X 客户端默认字体（Xft）
+! Default fonts (Xft) for X clients other than IceWM
 XTerm*faceName: DejaVu Sans Mono
 XTerm*faceSize: 11

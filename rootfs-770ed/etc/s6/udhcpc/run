@@ -1,6 +1,7 @@
 #!/bin/sh
-# 有线网络 DHCP：接口名由内核决定（CardBus 网卡可能是 eth0，机内无网口）。
-# 先给 5 秒等 hotplug 把网卡驱动装好，再找第一个非 lo 接口。
+# Wired DHCP: the interface name is decided by the kernel (a CardBus NIC shows
+# up as eth0; the 770ED has no built-in Ethernet). Give hotplug 5 seconds to
+# bind the driver, then pick the first non-lo interface.
 for i in 1 2 3 4 5; do
   iface=
   for d in /sys/class/net/*; do

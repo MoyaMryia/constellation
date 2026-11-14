@@ -100,8 +100,9 @@ install -m 0755 "$SRCROOT/wpa_supplicant-2.10/wpa_supplicant/wpa_supplicant" \
   "$DEST/usr/sbin/wpa_supplicant"
 
 if [ ! -f "$DEST/etc/wpa_supplicant/wpa_supplicant.conf" ]; then
+  # NOTE: keep this file pure ASCII -- the target has no CJK fonts.
   cat > "$DEST/etc/wpa_supplicant/wpa_supplicant.conf" <<'CONF'
-# 最小配置：把 SSID / 口令改掉，然后
+# Minimal configuration: edit SSID / passphrase, then
 #   wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant/wpa_supplicant.conf
 #   udhcpc -i wlan0
 ctrl_interface=/var/run/wpa_supplicant

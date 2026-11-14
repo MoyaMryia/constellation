@@ -87,35 +87,36 @@ done
 [ -f "$SRC/livecd/baslin/BOOT.BAT" ] && cp "$SRC/livecd/baslin/BOOT.BAT" "$WORK/baslin/"
 
 cat > "$WORK/menu.lst" <<EOF
-# grub4dos 菜单：BasicLinux 3.5 LCARS，内核 = $LCARS_KERNEL（CONFIG_M686）
-# root 是真实 ext2 分区（不是上游的 loop + FS.IMG），所以不需要 initrd。
+# grub4dos menu: BasicLinux 3.5 LCARS, kernel = $LCARS_KERNEL (CONFIG_M686).
+# root is a real ext2 partition (not the upstream loop + FS.IMG), so no initrd.
 timeout 5
 default 0
 
 title BasicLinux 3.5 LCARS (ThinkPad 770ED, /dev/hda3)
   kernel /baslin/ZIMAGE root=/dev/hda3 rw
 
-# 注意：2.2.26 这份内核没编 CONFIG_SERIAL_CONSOLE（启动信息里那句
-# "Serial driver version 4.27 with no serial options enabled"），所以
-# console=ttyS0 不会把内核日志送到串口；但 /etc/inittab 里有 ttyS0 的
-# getty，串口能拿到登录 shell。要内核日志也上串口得重编 2.2 内核。
-title BasicLinux 3.5 LCARS (串口 115200 登录 shell；内核日志在 VGA)
+# NOTE: this 2.2.26 kernel was built without CONFIG_SERIAL_CONSOLE (hence the
+# "Serial driver version 4.27 with no serial options enabled" line at boot), so
+# console=ttyS0 does NOT send the kernel log to the serial port. /etc/inittab
+# still starts a getty on ttyS0, so you do get a login shell there; getting the
+# kernel log on serial needs a rebuilt 2.2 kernel.
+title BasicLinux 3.5 LCARS (serial 115200 login shell; kernel log stays on VGA)
   kernel /baslin/ZIMAGE root=/dev/hda3 rw console=ttyS0,115200
 
-title BasicLinux 3.5 LCARS (lowmem, 4MB 机器用)
+title BasicLinux 3.5 LCARS (lowmem, for 4MB machines)
   kernel /baslin/ZIMAGE root=/dev/hda3 ro lowmem
 
-title BasicLinux 3.5 LCARS (486 内核 zimage.4dx)
+title BasicLinux 3.5 LCARS (486 kernel zimage.4dx)
   kernel /baslin/zimage.4dx root=/dev/hda3 rw
 
-title BasicLinux 3.5 LCARS (通用 386 大内核 bzimage.big)
+title BasicLinux 3.5 LCARS (generic 386 kernel bzimage.big)
   kernel /baslin/bzimage.big root=/dev/hda3 rw
 EOF
 
 if [ "$WITH_FSIMG" = 1 ]; then
   cat >> "$WORK/menu.lst" <<'EOF'
 
-title BasicLinux 3.5 LCARS (ramdisk + fs.img, 上游原味)
+title BasicLinux 3.5 LCARS (ramdisk + fs.img, upstream original)
   kernel /baslin/ZIMAGE root=/dev/ram0 rw initrd=/baslin/INITFS.GZ
 EOF
 fi
@@ -252,18 +253,19 @@ mkdir -p "$WORK/root/hda1" "$WORK/root/fd"
 
 # 4.5 说明放在 /root
 cat > "$WORK/root/root/README.constellation" <<'EOF'
-这是 BasicLinux 3.5 LCARS（kernel 2.2.26，CONFIG_M686 = Pentium II 专用内核）。
-由 Constellation 的 scripts/build-lcars-770ed.sh 打成 CF 卡镜像。
+This is BasicLinux 3.5 LCARS (kernel 2.2.26, CONFIG_M686 = the Pentium II
+build). The CF-card image was assembled by Constellation's
+scripts/build-lcars-770ed.sh.
 
-启动方式：grub4dos（/baslin/ZIMAGE）→ root=/dev/hda3（ext2 真分区）
-串口：console=ttyS0,115200 那一项，或在菜单里加 console=ttyS0,115200 参数
-swap：/dev/hda2（256 MiB），/etc/rc 里 swapon
+Boot: grub4dos loads /baslin/ZIMAGE with root=/dev/hda3 (a real ext2 partition)
+Serial: pick the menu entry that adds console=ttyS0,115200
+Swap: /dev/hda2 (256 MiB), enabled by swapon in /etc/rc
 
-上游的 ramdisk 模式（loop + FS.IMG）没有启用；要它请用 WITH_FSIMG=1 重做，
-并把 fs.img 放进 /baslin/。
+The upstream ramdisk mode (loop + FS.IMG) is not enabled; rebuild with
+WITH_FSIMG=1 and put fs.img into /baslin/ if you want it.
 
-注意：2.2.26 没有 APM、没有 CardBus(yenta)、没有 USB 2.0；PCMCIA 只有 16 位
-（/etc/pcmcia + i82365 那套模块在 /lib/modules/2.2.26 下）。
+Caveats: 2.2.26 has no APM, no CardBus (yenta) and no USB 2.0; PCMCIA is 16-bit
+only (the /etc/pcmcia + i82365 module set lives under /lib/modules/2.2.26).
 EOF
 
 mke2fs -q -F -t ext2 -b 1024 -I 128 -O none -L lcars -E offset=$((P3_OFF * 512)) \

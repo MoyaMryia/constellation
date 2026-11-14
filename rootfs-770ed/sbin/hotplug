@@ -1,12 +1,12 @@
 #!/bin/sh
-# 内核 uevent 助手（CONFIG_UEVENT_HELPER_PATH="/sbin/hotplug"）。
-# 唯一的活儿：按 MODALIAS 找到并加载驱动。
+# Kernel uevent helper (CONFIG_UEVENT_HELPER_PATH="/sbin/hotplug").
+# Its only job: resolve MODALIAS to a driver and load it.
 #
-# 覆盖的场景就是 770ED 的两个 CardBus 槽位：
-#   - 插 16 位 PC 卡（pcnet_cs/3c589_cs/serial_cs/CF 卡转接）→ pcmcia: 别名
-#   - 插 CardBus 卡（8139too/e1000/ath5k/b43…） → pci: 别名
-#   - 插 USB 设备进机内 UHCI 口 → usb: 别名
-# 没匹配上就安静退出（modprobe -q）。
+# Covered scenarios are the two CardBus slots of the 770ED:
+#   - 16-bit PC Card (pcnet_cs / 3c589_cs / serial_cs / CF adapter) -> pcmcia:
+#   - CardBus card (8139too / e1000 / ath5k / b43 ...)               -> pci:
+#   - USB device in the built-in UHCI ports                          -> usb:
+# Nothing matches: exit quietly (modprobe -q).
 [ "$ACTION" = "add" ] || exit 0
 [ -n "$MODALIAS" ] || exit 0
 exec /sbin/modprobe -q "$MODALIAS"

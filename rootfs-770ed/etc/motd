@@ -1,6 +1,6 @@
 
-  Constellation OS —— ThinkPad 770ED 风味
+  Constellation OS -- ThinkPad 770ED flavor
 
-  跑 `fetch` 看这台机器的 Mark 与概况；
-  跑 `hwcheck` 检查硬件；跑 `x` 起图形桌面（JWM）。
+  Run `fetch` for this machine's mark and a short summary;
+  `hwcheck` for a hardware report; `x` for the graphical desktop (JWM).
 

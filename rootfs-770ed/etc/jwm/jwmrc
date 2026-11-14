@@ -1,14 +1,16 @@
 <?xml version="1.0"?>
 <!--
-  Constellation OS / ThinkPad 770ED 的 JWM 配置（1024x768，Pentium II）。
-  刻意做得像 IceWM：顶部任务栏 + 时钟 + 开始菜单 + 窗口按钮。
+  JWM configuration for Constellation OS / ThinkPad 770ED
+  (1024x768, Pentium II). Deliberately IceWM-like: top taskbar, clock,
+  start menu and window buttons.
 
-  为什么是 JWM 不是 IceWM：IceWM 是 C++，Alpine x86 的 libgcc_s/libstdc++
-  在 Pentium II（无 SSE）上直接 SIGILL；JWM 是我们用 musl i486 自己编的
-  纯 C 窗口管理器，二进制里 SSE 指令为 0。见 docs/thinkpad-770ed.md §7。
+  Why JWM and not IceWM: IceWM is C++, and Alpine's x86 libgcc_s/libstdc++
+  fault with SIGILL on a Pentium II (no SSE). JWM is a pure C window manager
+  built here from musl i486 sources, with zero SSE instructions in the binary.
+  See docs/thinkpad-770ed.md section 7.
 -->
 <JWM>
-  <!-- ============ 外观 ============ -->
+  <!-- ============ Appearance ============ -->
   <WindowStyle>
     <Font>Sans-10</Font>
     <Width>4</Width>
@@ -59,35 +61,35 @@
   </MenuStyle>
 
   <RootMenu labeled="true" height="20">
-    <Program label="终端 (st)" icon="xterm">st</Program>
-    <Program label="文件管理器 (mc)" icon="folder">mc</Program>
-    <Program label="系统自检 (hwcheck)" icon="info">xterm -e hwcheck</Program>
+    <Program label="Terminal (st)" icon="xterm">st</Program>
+    <Program label="File manager (mc)" icon="folder">mc</Program>
+    <Program label="System check (hwcheck)" icon="info">st -e hwcheck</Program>
     <Separator/>
-    <Menu label="网络">
-      <Program label="DHCP 续租">udhcpc -i eth0 -n -q</Program>
-      <Program label="接口信息">st -e sh -c "ip addr; sleep 30"</Program>
+    <Menu label="Network">
+      <Program label="DHCP renew">udhcpc -i eth0 -n -q</Program>
+      <Program label="Interface info">st -e sh -c "ip addr; sleep 30"</Program>
     </Menu>
-    <Menu label="硬件">
-      <Program label="PCI 设备">st -e sh -c "lspci; sleep 30"</Program>
-      <Program label="USB 设备">st -e sh -c "lsusb; sleep 30"</Program>
-      <Program label="帧缓冲模式">st -e sh -c "fbset; sleep 30"</Program>
-      <Program label="声音音量">st -e sh -c "mixer; mixer 80; sleep 3"</Program>
+    <Menu label="Hardware">
+      <Program label="PCI devices">st -e sh -c "lspci; sleep 30"</Program>
+      <Program label="USB devices">st -e sh -c "lsusb; sleep 30"</Program>
+      <Program label="Framebuffer mode">st -e sh -c "fbset; sleep 30"</Program>
+      <Program label="Volume">st -e sh -c "mixer; mixer 80; sleep 3"</Program>
     </Menu>
     <Separator/>
-    <Restart label="重启窗口管理器"/>
-    <Exit label="退出到控制台" confirm="false"/>
+    <Restart label="Restart window manager"/>
+    <Exit label="Exit to console" confirm="false"/>
   </RootMenu>
 
-  <!-- ============ 顶部任务栏（IceWM 风格） ============ -->
+  <!-- ============ Top taskbar (IceWM style) ============ -->
   <Tray x="0" y="0" height="26" autohide="off">
-    <TrayButton label="开始">root:1</TrayButton>
+    <TrayButton label="Start">root:1</TrayButton>
     <Spacer width="8"/>
     <TaskList maxwidth="600"/>
     <Dock/>
     <Clock format="%H:%M">%H:%M</Clock>
   </Tray>
 
-  <!-- ============ 行为 ============ -->
+  <!-- ============ Behaviour ============ -->
   <DoubleClickSpeed>400</DoubleClickSpeed>
   <DoubleClickDelta>2</DoubleClickDelta>
   <FocusModel>sloppy</FocusModel>

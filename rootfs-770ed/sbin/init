@@ -1,27 +1,32 @@
 #!/bin/sh
-# Constellation OS — ThinkPad 770ED 的 PID 1。
+# Constellation OS -- PID 1 for the ThinkPad 770ED.
 #
-# 结构与其他风味同构：挂伪文件系统 → 建 zram swap → 按需加载 770ED
-# 特有驱动 → exec s6-svscan。
+# Same structure as the other flavors: mount pseudo filesystems -> set up zram
+# swap -> load the 770ED-specific drivers on demand -> exec s6-svscan.
 #
-# 770ED 与 X61 风味的三点差别：
-#   1) 没有 ACPI，只有 APM 1.2：/proc/apm 由内核 APM 驱动提供，休眠/挂起
-#      由 BIOS 主导，用户空间不需要常驻守护进程。
-#   2) 显示器是 Trident Cyber9397，fb 驱动是模块（tridentfb）：必须在
-#      getty 之前加载，否则 tty1 会停在 VGA 文本 80x25 直到有人 modprobe。
-#   3) 声卡是 ISA PnP 的 CS4237B，同样按模块加载；加载失败不影响启动
-#      （有的机器 BIOS 把音频关了，或资源被 Cat 的 DSP 占着）。
+# Three differences from the X61 flavor:
+#   1) No ACPI, only APM 1.2: /proc/apm comes from the kernel APM driver;
+#      suspend/resume is driven by the BIOS, no user-space daemon needed.
+#   2) The display is a Trident Cyber9397 whose fb driver (tridentfb) is a
+#      module: it must be loaded before getty, otherwise tty1 stays in VGA text
+#      80x25 until somebody runs modprobe.
+#   3) The sound chip is an ISA PnP CS4237B, also a module; a load failure must
+#      not block booting (some BIOSes disable audio, or the resources are held
+#      by the Cat DSP).
 export PATH=/bin:/sbin:/usr/bin:/usr/sbin
 
-# 注意顺序与重定向：这里**不能**写 `2>/dev/null`。此刻 /dev 还是空目录
-# （本风味没开 CONFIG_DEVTMPFS_MOUNT），ash 在重定向失败时会直接跳过该
-# 命令——挂载就不会发生，然后 `grep /proc/mounts || exec sh` 掉进 shell，
-# 症状是"启动了、没有主机名、每行命令都报 not found"。
+# Mind the order and the redirections: you **cannot** write `2>/dev/null` here.
+# /dev is still an empty directory at this point (this flavor does not set
+# CONFIG_DEVTMPFS_MOUNT), and ash skips the whole command when a redirection
+# fails -- so the mount never happens, `grep /proc/mounts || exec sh` drops to a
+# shell, and the symptom is "it booted, no hostname, every command says not
+# found".
 mountpoint -q /dev  || mount -t devtmpfs devtmpfs /dev
 mountpoint -q /proc || mount -t proc proc /proc
 mountpoint -q /sys  || mount -t sysfs sysfs /sys
-# devpts：终端模拟器（st/xterm）要 openpty()，没有 /dev/ptmx 就报
-# "openpty failed"。devtmpfs 只有 /dev/ptmx 节点，pty 主从对要 devpts 提供。
+# devpts: terminal emulators (st/xterm) need openpty(); without /dev/ptmx they
+# report "openpty failed". devtmpfs only provides the /dev/ptmx node -- the pty
+# master/slave pairs come from devpts.
 mkdir -p /dev/pts
 mountpoint -q /dev/pts || mount -t devpts devpts /dev/pts -o gid=5,mode=0620
 
@@ -30,45 +35,52 @@ grep -q '^sysfs /sys sysfs' /proc/mounts || exec sh
 
 mount -o remount,rw / || exec sh
 
-# /tmp 用 tmpfs：镜像上的 /tmp 若不隔离，Xorg 的 /tmp/.X0-lock、编译中间物
-# 之类会跨次开机残留（典型症状：第二次启动 X 时报
-# "Server is already active for display 0"）。顺便也少写盘。
+# /tmp on tmpfs: without isolation, leftovers such as Xorg's /tmp/.X0-lock or
+# build intermediates survive a reboot (typical symptom: the second startx
+# reports "Server is already active for display 0"). Also saves flash writes.
 mountpoint -q /tmp || mount -t tmpfs -o size=16M,mode=1777 tmpfs /tmp || true
 hostname "$(cat /etc/hostname)"
 
-# 热插拔：CardBus 插卡后内核发 uevent，本脚本按 MODALIAS 交给 modprobe。
-# 没有 udev 也没有 systemd，这一行就是全部的"自动驱动加载"。
+# Hotplug: after a CardBus card is inserted the kernel sends a uevent and this
+# helper hands MODALIAS to modprobe. No udev, no systemd -- this line is all the
+# "automatic driver loading" there is.
 if [ -w /proc/sys/kernel/hotplug ]; then
   echo /sbin/hotplug > /proc/sys/kernel/hotplug 2>/dev/null || true
 fi
 
-# 冷插拔：把启动瞬间已经存在的设备节点补齐（CardBus 槽位、USB 口）。
+# Coldplug: populate device nodes that already existed at boot time (CardBus
+# slots, USB ports).
 /bin/mdev -s 2>/dev/null || true
 
-# 机内固定设备的驱动。三者都是模块，顺序无关，失败都无害：
-#   tridentfb  — 1024x768-16 面板模式见 /etc/modprobe.d/tridentfb.conf
-#   snd-cs4236 — CS4237B，ISA PnP 探测
-#   floppy     — APM 休眠需要它，哪怕没插软驱
-#   zram       — 6.6 风的 zram 是模块（6.18 风是内置，modprobe 会静默失败）
-#   snd-mixer-oss — 提供 /dev/mixer，配 /bin/mixer 调音量
-#   ppp_generic — 创建 /dev/ppp（Modem 拨号的字符设备，无 bus modalias）
+# Drivers for the fixed on-board devices. All are modules; order does not
+# matter and failures are harmless:
+#   tridentfb     -- 1024x768-16 panel mode, see /etc/modprobe.d/tridentfb.conf
+#   snd-cs4236    -- CS4237B, ISA PnP probing
+#   floppy        -- APM suspend wants it, even without a drive attached
+#   zram          -- zram is a module in the 6.6 flavor (built in for 6.18,
+#                    where modprobe fails silently)
+#   snd-mixer-oss -- provides /dev/mixer for /bin/mixer volume control
+#   ppp_generic   -- creates /dev/ppp (modem character device, no bus modalias)
 for m in tridentfb snd-cs4236 snd-mixer-oss floppy zram ppp_generic; do
   /sbin/modprobe -q "$m" 2>/dev/null || true
 done
 
-# 冷插拔：启动之前就已经存在的 PCI/USB/PnP 设备不会再有 uevent（热插拔
-# 助手是刚刚才装上的），所以按 modalias 逐条 modprobe 一遍——这就是 udev
-# coldplug 在本镜像里的全部等价物。CardBus 网卡、USB 卡、外接显示器都在
-# 这一步被驱动接管。
+# Coldplug: PCI/USB/PnP devices that existed before boot will not send another
+# uevent (the hotplug helper was only installed just now), so walk their
+# modalias files and modprobe each one -- this is the entire equivalent of udev
+# coldplug in this image. CardBus NICs, USB cards and external displays are all
+# picked up by their drivers here.
 for mf in /sys/bus/pci/devices/*/modalias /sys/bus/usb/devices/*/modalias \
           /sys/bus/pnp/devices/*/modalias /sys/bus/pcmcia/devices/*/modalias; do
   [ -r "$mf" ] || continue
   /sbin/modprobe -q "$(cat "$mf")" 2>/dev/null || true
 done
 
-# 真实 swap 分区（mkimage 在命令行里给 cswap=/dev/sdaX）。只按命令行来，
-# 绝不猜设备：布局是 p2=swap/p3=root 还是 p2=root，猜错一次就把根分区
-# mkswap 了。第一次启动时分区里还没有 swap 签名，mkswap 后启用。
+# Real swap partition (mkimage passes cswap=/dev/sdaX on the command line).
+# Only ever use what the command line says -- never guess the device: whether the
+# layout is p2=swap/p3=root or p2=root, guessing wrong once means running
+# mkswap on the root partition. On first boot the partition has no swap
+# signature yet, so mkswap it and enable it.
 SWAPDEV=
 for arg in $(cat /proc/cmdline); do
   case "$arg" in cswap=*) SWAPDEV=${arg#cswap=} ;; esac
@@ -83,7 +95,7 @@ if [ -n "$SWAPDEV" ] && [ -b "$SWAPDEV" ]; then
   fi
 fi
 
-# zram swap：64 MiB 机型上这是唯一能低成本换来的额外可用内存。
+# zram swap: on a 64 MiB machine this is the cheapest available extra memory.
 if [ -e /sys/block/zram0/disksize ]; then
   ZRAM_SIZE=${ZRAM_SIZE:-16777216}
   echo "$ZRAM_SIZE" > /sys/block/zram0/disksize 2>/dev/null
