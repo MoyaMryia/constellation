@@ -54,6 +54,7 @@ Constellation OS 是一个面向老旧 x86 硬件的 Linux 发行版项目。其
 - [kernel/NOTES.md](kernel/NOTES.md) — 内核裁剪研究笔记（M1 / D10 实测数据）
 - [busybox/NOTES.md](busybox/NOTES.md) — BusyBox/musl initramfs 研究笔记（M1）
 - [docs/m2-notes.md](docs/m2-notes.md) — M2 最小系统笔记（s6/rootfs/syslinux 磁盘启动）
+- [docs/amd64-x61.md](docs/amd64-x61.md) — x61 风味（64 位总线、gfxpayload 可调、i3/tinywm 路线边界）
 - [BUILDING.md](BUILDING.md) — 从干净仓库构建核心组件、M2 rootfs 与部署镜像
 
 ## 状态
@@ -61,7 +62,7 @@ Constellation OS 是一个面向老旧 x86 硬件的 Linux 发行版项目。其
 - **M1 核心**：精简 LTS 内核 + musl i486 静态 BusyBox initramfs，QEMU 24 MiB 启动到 shell。
 - **M2 最小系统**：s6-svscan + getty，硬盘（BIOS → MBR → 引导器 → bzImage → ext4 root）启动到 `login:`。
 - **770ED 风味**：可引导镜像 + 真机验证（见下节）。
-- **x61 风味**：64 位总线，见分支 `x61-amd64`。
+- **x61 风味**：64 位总线（AMD64 核心 + s6 + syslinux），见 [docs/amd64-x61.md](docs/amd64-x61.md)。
 
 尚未发布安装器；镜像由脚本拼装后 `dd` 写盘（`scripts/install-disk-770ed.sh`）。
 
