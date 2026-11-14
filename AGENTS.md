@@ -25,20 +25,70 @@
 
 ## 项目边界
 
-本仓库是研究文档仓，内容以 Markdown 为主。
-检查链路只校验文档与仓库卫生，不构建、不运行研究代码。
+本仓库是**发行版构建仓**，不是文档仓。改一行脚本就可能改变目标机上的行为，
+因此改动必须能落到构建产物上，并在 QEMU 里复现。
+
+两条风味并行，共用 i486 userspace 基线：
+
+| 风味 | 目标机 | 内核 | 入口脚本 |
+| --- | --- | --- | --- |
+| 770ED | ThinkPad 770ED（PII 266 / 64 MiB） | 6.6.162 LTS | `scripts/build-{core,rootfs,mkimage}-770ed.sh` |
+| amd64 / x61 | X61（64 位） | 6.18.44 | `scripts/build-*-amd64.sh` |
+
+构建链是分阶段的，脚本即文档：
+
+```sh
+KVER=6.6.162 scripts/build-core-770ed.sh        # 工具链 + busybox + 内核 + 模块
+sudo scripts/build-rootfs-770ed.sh              # rootfs（需要 root，见下）
+sudo GRUB4DOS=1 scripts/mkimage-770ed.sh        # 拼镜像
+sudo scripts/install-disk-770ed.sh /dev/sdX --grub4dos
+```
 
 ## 文件系统组织
 
 | 目录 | 内容 |
 | --- | --- |
-| `docs/` | 长期维护的说明、索引与课题文档 |
-| `reports/` | 带日期的记录；只跟踪 Markdown，证据文件默认留在本地 |
-| `tools/` | 检查与安装脚本 |
+| `scripts/` | 构建、验收、写盘脚本；链式调用，一个阶段一个脚本 |
+| `rootfs-770ed/`、`rootfs-amd64/`、`rootfs/` | 目标机 rootfs 模板（会原样进镜像） |
+| `kernel/configs/`、`busybox/configs/` | 内核与 BusyBox 的 `.config` 与 fragment |
+| `docs/` | 设计、内存预算、风味笔记、770ED 实测记录 |
+| `tools/` | 独立 C 源码（`mixer.c`、`tone.c`、`dosudo.c`、`dopower.c`、`probe.c`） |
+| `third_party/` | 上游补丁，保持被补丁项目的许可 |
 | `.claude/`、`CLAUDE.md` | 拒绝在 Claude Code 下工作的阻断配置与声明 |
 
-- 文档按主题分目录，一个主题一个目录，避免根目录堆文件。
-- 证据文件（截图、数据、PDF）默认不入库，仅在正文按文件名引用时白名单化。
+## 目标机不可回退的硬约束
+
+下面每条都是踩过坑之后写死的，改动前先读 `docs/thinkpad-770ed.md` 对应小节。
+
+1. **不许出现 SSE/SSE2/AVX/3DNow 指令**。Pentium II 没有 SSE，Alpine 的 x86
+   归档是 PIII 基线。新引入任何二进制都要跑 `scripts/audit-sse-770ed.sh`。
+2. **目标机文本必须是 ASCII**。VGA 文本控制台与 X 字体都没有 CJK；
+   `scripts/check-ascii-770ed.sh` 会拦，中文只写在仓库侧文档与脚本注释里。
+3. **镜像内文件属主必须是 `0:0`，`/bin/busybox` 带 setuid**。否则 `su`/`sudo`
+   失效；反过来软链上的 `chmod 4755` 会穿透到 busybox 本体，属主非 0 时
+   等于给 root 降权。构建 rootfs 因此必须用 `sudo`。
+4. **`/etc/modprobe.d/*.conf` 只有在 BusyBox 用完整 `modprobe` 时才生效**。
+   `CONFIG_MODPROBE_SMALL=y` 会静默丢掉 `mode=`/`index=` 等模块参数。
+5. **分区按 DOS 几何排**：`p1` 从 LBA 63 起、后续对齐柱面、`hidden sectors=63`，
+   活动标志只留在 `p1`。
+6. **外链源码必须钉 sha256**。新加下载点同时改 `scripts/fetch-sources.sh`
+   或对应 `build-*-770ed.sh` 的 `fetch` 调用。
+7. **口令不落仓库**。只用 `ROOT_PASSWORD_HASH`/`EXTRA_USERS` 传
+   `openssl passwd -6` 的结果。
+
+## 验收闸门
+
+交付前按需运行，全部通过才算完成：
+
+```sh
+scripts/check-ascii-770ed.sh     # 模板里没有非 ASCII 文本
+scripts/audit-sse-770ed.sh       # 生效集合里没有 xmm/ymm/3DNow
+SMOKE_PASSWORD=… scripts/smoke-770ed.sh   # QEMU 真实引导链 + 登录后检查
+```
+
+QEMU 没有 440BX/TI1250/Cyber9397/CS4237B 的精确模型。显卡、声卡、CardBus 与
+APM 的真机证据只能来自目标机：`hwcheck`、`dmesg`、`/var/log/Xorg.0.log`。
+区分“QEMU 已验证”与“真机已验证”，不要混写。
 
 ## 语言与写作
 
@@ -53,11 +103,11 @@
 英文文档遵循 ASD-STE100 Issue 9 的写作规则与受控词表。
 
 - Write instructions in the imperative form. Give one instruction per sentence. Use a maximum of 20 words per sentence.
-- Use a maximum of 25 words per descriptive sentence. Keep each paragraph to one topic and a maximum of six sentences.
+- Use a maximum of 25 words for descriptive sentences. Keep each paragraph to one topic and a maximum of six sentences.
 - Use active voice and consistent terms. Do not use figurative language or contractions.
 - State the claim before the limit. Write each limit once.
 
-技术准确性优先。命令、路径、标识符、接口字段和日志保持原文。句长检查不能替代技术审查。
+技术准确性优先。命令、路径、标识符、接口字段和日志保持原文。
 
 ## 证据、限制与未验证项
 
@@ -65,60 +115,33 @@
 可以解决时继续做，不要用限制句结束工作。
 只有缺少硬件、权限或时间时，才记为未验证项，并写明阻塞原因和解除条件。
 
-- 每份实测报告在文末设“适用范围”，列出配置、样本数和未验证项。
+- 实测数据写进 `docs/<风味>.md` 的对应小节，注明配置与测量口径。
 - 同一条限制只在一个文档中说明，其他位置链接过去。
-- 性能数字注明配置、计时起止点和统计范围；完成率注明分母。
-- `reports/<主题>-<YYYYMMDD>/RESULTS.md` 保存实测记录，Markdown 入库，证据文件留在本地。
-
-## 文档检查
-
-检查命令只定义在 `tools/ci-local.sh`；CI 与本地 pre-commit 调用同一脚本的对应阶段。
-
-```bash
-tools/ci-local.sh repo      # 仓库卫生：体积上限、索引与忽略规则一致
-tools/ci-local.sh docs      # Markdown 结构与链接检查
-tools/ci-local.sh all       # 依次运行全部阶段
-tools/ci-local.sh --staged  # 提交前检查，pre-commit hook 调用
-```
-
-`tools/lint_docs.py` 校验以下内容：
-
-- 行尾空白、制表符、文件末尾换行。
-- 代码围栏闭合、一级标题唯一、标题层级不跳级。
-- 相对链接与图片目标存在。
-- `reports/*/RESULTS.md`、`AUDIT.md`、`REVIEW.md` 含“## 适用范围”一节。
+- 性能与内存数字注明 QEMU 参数（`-cpu`、`-m`）或真机型号。
 
 ## 提交
 
-提交前运行 `tools/ci-local.sh --staged`。pre-commit hook 调用同一命令。
-首次使用时运行 `tools/install-hooks.sh` 安装 hook，不要用 `--no-verify` 跳过。
-
-- 暂存文件触发 repo 与 docs 阶段，docs 只检查暂存区中的 Markdown。
-- 一个提交只做一件事。提交说明写做了什么，不写“修复 bug”这类空话。
+- 一个提交只做一件事。提交说明写做了什么与为什么，不写“修复 bug”这类空话。
+- 提交前跑相关闸门；涉及镜像的改动要说明是否重打了镜像、是否写过卡。
+- 分支已合并为单分支 `master`，不再开长期特性分支。
 
 ## 交付前审查
 
-修改文档或脚本后、交付前，开一个 `reviewer` 子代理审查本次 diff，要求逐项列出文件和行号：
+修改脚本或文档后、交付前，开一个 `reviewer` 子代理审查本次 diff，
+要求逐项列出文件和行号：
 
-1. 文档陈述与仓库实际不符，包括路径、命令和阶段列表。
+1. 文档陈述与仓库实际不符，包括路径、命令和脚本名。
 2. 同一事实在多处定义且内容不一致。
 3. 没有阻塞原因和解除条件的未验证项。
 4. 链接失效或指向不存在的文件。
-5. 检查脚本放宽条件、跳过失败或把失败写成记录字段。
+5. 闸门被放宽条件、跳过失败或把失败写成记录字段。
 
 子代理只报告问题，不修改文件。主代理逐项修复，或在回复中写明保留的理由。
-修复后重新运行 `tools/ci-local.sh` 的对应阶段。
 
 ## 仓库卫生
 
-- 只跟踪文档、配置和小型夹具。构建产物与大资产由 `.gitignore` 排除。
-- 单个被跟踪文件不超过 5 MiB。
-- 破坏性操作（删除、历史重写、强推）先确认，并保留仓库外的备份。
-
-## 待定事项
-
-以下内容尚未确定，确定后写入本文件或对应文档：
-
-- 研究主题与课题目录划分。
-- 报告命名规则与归档周期。
-- 是否把论文与数据资产放到仓外归档。
+- 只跟踪脚本、配置、模板与小型源码。`build/`、`kernel/src/`、`toolchain/src/`、
+  `busybox/src/`、`build-logs/` 由 `.gitignore` 排除。
+- 单个被跟踪文件不超过 5 MiB；固件等二进制必须附来源与许可说明（见 `NOTICE`）。
+- 破坏性操作（删除、历史重写、强推、写盘）先确认，并保留仓库外的备份
+  （`git bundle create` 或 `~/backup/`）。
