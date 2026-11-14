@@ -86,8 +86,10 @@ if [ -n "$ROOT_START" ] && [ -n "$ROOT_SIZE" ]; then
   WANT_SIZE=$((DEV_SECTORS - ROOT_START - 2048))   # 末尾留 1 MiB 余量
   if [ "$WANT_SIZE" -gt "$ROOT_SIZE" ]; then
     echo "install-disk: 根分区 p$ROOT_PART 扩容 $ROOT_SIZE -> $WANT_SIZE 扇区"
+    # 注意：这里**不能**写 `*`（bootable）。DOS/BIOS 只认一个活动分区，
+    # 两个分区都标 active 时老 BIOS 会拒绝启动；活动标志留在 p1 上。
     sfdisk --force --no-reread -N "$ROOT_PART" "$DEV" <<EOF
-$ROOT_START, $WANT_SIZE, 83, *
+$ROOT_START, $WANT_SIZE, 83
 EOF
     partprobe "$DEV" 2>/dev/null || blockdev --rereadpt "$DEV" 2>/dev/null || true
     sleep 1

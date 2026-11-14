@@ -24,6 +24,7 @@ CFLAGS_COMMON="-Os -march=i486 -mno-sse -mno-sse2 -mno-mmx -mno-3dnow -fno-stack
 
 TCC_VER=0.9.27
 MAKE_VER=4.4.1
+BINUTILS_VER=2.42
 
 [ -x "$CC_WRAP" ] || { echo "缺少工具链：先跑 scripts/build-core-770ed.sh" >&2; exit 1; }
 mkdir -p "$SRCROOT"
@@ -78,6 +79,24 @@ if [ ! -x "make-$MAKE_VER/make" ]; then
 fi
 [ -x "make-$MAKE_VER/make" ] || { echo "make 构建失败" >&2; exit 1; }
 
+# ---- binutils（as / ld / ar / nm / objdump / strip / objcopy / readelf / size）----
+BU_TAR=$(fetch "https://ftp.gnu.org/gnu/binutils/binutils-$BINUTILS_VER.tar.xz")
+cd "$SRCROOT"
+[ -d "binutils-$BINUTILS_VER" ] || tar -xJf "$BU_TAR"
+if [ ! -x "binutils-$BINUTILS_VER/objdump/objdump" ]; then
+  echo "dev: 编 binutils" >&2
+  cd "binutils-$BINUTILS_VER"
+  # 只要三组：as / ld / binutils 工具。关掉 gdb、gold、nls、werror 省时间。
+  ./configure --host=i486-linux-musl --target=i486-linux-musl \
+    --disable-nls --disable-werror --disable-gdb --disable-gprofng \
+    --disable-gold --disable-sim --disable-libdecnumber \
+    CC=i486-linux-musl-gcc CFLAGS="$CFLAGS_COMMON -Wno-error" \
+    LDFLAGS="-static" >/dev/null
+  make -j"$JOBS" all-gas all-ld all-binutils >/dev/null 2>&1 || \
+    make -j"$JOBS" all-gas all-ld all-binutils
+  cd "$SRCROOT"
+fi
+
 # ---- 安装 ----
 echo "dev: 安装到 $DEST" >&2
 mkdir -p "$DEST/usr/bin" "$DEST/usr/lib/tcc/include" "$DEST/usr/include"
@@ -98,5 +117,23 @@ cp -a "tcc-$TCC_VER/include/." "$DEST/usr/lib/tcc/include/"
 # musl 头文件（stdio.h 等，tcc 默认会搜 /usr/include）
 cp -a "$MUSL/include/." "$DEST/usr/include/"
 
+# binutils：静态链接的 as/ld 与常用 binutils 工具
+# 注意：make 之后的可执行文件在源码树里是 *-new（as-new / ld-new / nm-new…），
+# 只有 make install 才会改名。这里直接按 -new 找，省一次 install 到宿主的操作。
+for t in as ld ar nm objdump strip objcopy readelf size ranlib; do
+  src=
+  for cand in "binutils-$BINUTILS_VER/gas/$t-new" "binutils-$BINUTILS_VER/ld/$t-new" \
+              "binutils-$BINUTILS_VER/binutils/$t-new" \
+              "binutils-$BINUTILS_VER/binutils/$t" "binutils-$BINUTILS_VER/ld/$t" \
+              "binutils-$BINUTILS_VER/gas/$t"; do
+    [ -x "$cand" ] && { src=$cand; break; }
+  done
+  [ -n "$src" ] || { echo "dev: 跳过 $t（没编出来）" >&2; continue; }
+  install -m 0755 "$src" "$DEST/usr/bin/$t"
+done
+
 strip --strip-all "$DEST/usr/bin/tcc" "$DEST/usr/bin/make" 2>/dev/null || true
-echo "dev: 完成  tcc=$(du -h "$DEST/usr/bin/tcc" | cut -f1)  make=$(du -h "$DEST/usr/bin/make" | cut -f1)  headers=$(du -sh "$DEST/usr/include" | cut -f1)" >&2
+for t in as ld ar nm objdump strip objcopy readelf size ranlib; do
+  [ -f "$DEST/usr/bin/$t" ] && strip --strip-all "$DEST/usr/bin/$t" 2>/dev/null || true
+done
+echo "dev: 完成  tcc=$(du -h "$DEST/usr/bin/tcc" | cut -f1)  make=$(du -h "$DEST/usr/bin/make" | cut -f1)  binutils=$(du -ch "$DEST/usr/bin/"{as,ld,ar,nm,objdump,strip,objcopy,readelf,size,ranlib} 2>/dev/null | tail -1 | cut -f1)  headers=$(du -sh "$DEST/usr/include" | cut -f1)" >&2

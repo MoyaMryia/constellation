@@ -49,6 +49,19 @@ KERNEL_CMDLINE=${KERNEL_CMDLINE:-"root=/dev/sda$ROOT_PART rootfstype=ext4 init=/
 # 文本模式，进内核后再由 tridentfb 切到 1024x768 帧缓冲控制台。
 GFXPAYLOAD=${GFXPAYLOAD:-text}
 
+# ---- DOS 时代的几何约定（770ED 是 1998 年的机器，别按今天的习惯排）----
+#   * 第一条磁道（63 扇区）留给 MBR + 引导代码，所以**第一个分区从 LBA 63 开始**，
+#     而不是今天的 1 MiB（LBA 2048）。DOS 的 FDISK/INT13 按 63 扇区/磁道、
+#     16 磁头算柱面，分区不在磁道边界上时老 BIOS 与 DOS 会算错偏移。
+#   * 后续分区对齐到**柱面**（63*16 = 1008 扇区）的整数倍，这是 FDISK 的默认。
+#   * 分区类型用 0x0e（FAT16 LBA）：4 GB 卡早已超出 CHS 可寻址范围，必须 LBA。
+DOS_LAYOUT=${DOS_LAYOUT:-1}
+SECT_PER_TRACK=${SECT_PER_TRACK:-63}
+HEADS=${HEADS:-16}
+CYL=$((SECT_PER_TRACK * HEADS))
+FIRST_SECTOR=$((SECT_PER_TRACK))          # 63
+align_up () { echo $(( (($1 + CYL - 1) / CYL) * CYL )); }
+
 WORK=$(mktemp -d /tmp/constellation-770ed-mkimage.XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 
@@ -57,38 +70,48 @@ die () { echo "mkimage-770ed: $*" >&2; exit 1; }
 [ -f "$BZIMAGE" ] || die "找不到内核：$BZIMAGE（先跑 scripts/build-core-770ed.sh）"
 [ -d "$ROOTFS" ] || die "找不到 rootfs：$ROOTFS（先跑 scripts/build-rootfs-770ed.sh）"
 [ -f "$GRUB_DIR/boot.img" ] || die "缺少 GRUB i386-pc 模块目录：$GRUB_DIR"
-for c in sfdisk mformat mcopy dd mke2fs truncate grub-mkimage; do
+for c in sfdisk mcopy dd mke2fs mkfs.vfat truncate grub-mkimage; do
   command -v "$c" >/dev/null 2>&1 || die "缺少宿主工具：$c"
 done
 
-# ---- 1) 分区表 ----
+# ---- 1) 分区表（DOS 几何：p1@63，按柱面对齐）----
 rm -f "$OUT"
 truncate -s "$DISK_SIZE" "$OUT"
+BOOT_SECT=$(align_up $((BOOT_SIZE_MIB * 2048)))
+P1_START=$FIRST_SECTOR
+P2_START=$(align_up $((P1_START + BOOT_SECT)))
 if [ "$SWAP_MIB" -gt 0 ]; then
+  P3_START=$(align_up $((P2_START + SWAP_MIB * 2048)))
   sfdisk --quiet "$OUT" <<EOF
 label: dos
 unit: sectors
-2048, $((BOOT_SIZE_MIB * 2048)), 0e, *
-, $((SWAP_MIB * 2048)), 82, -
-, , 83, -
+$P1_START, $BOOT_SECT, 0e, *
+$P2_START, $((SWAP_MIB * 2048)), 82, -
+$P3_START, , 83, -
 EOF
 else
   sfdisk --quiet "$OUT" <<EOF
 label: dos
 unit: sectors
-2048, $((BOOT_SIZE_MIB * 2048)), 0e, *
-, , 83, -
+$P1_START, $BOOT_SECT, 0e, *
+$P2_START, , 83, -
 EOF
 fi
 P2_START=$(sfdisk --dump "$OUT" | awk -v p="$OUT$ROOT_PART" '$1==p{print $4}' | tr -d ,)
 [ -n "$P2_START" ] || die "无法解析根分区起始扇区"
-P1_OFF=$((2048 * 512))
+P1_OFF=$((P1_START * 512))
 P2_OFF=$((P2_START * 512))
-echo "mkimage-770ed: p1@${P1_OFF}B(FAT16 ${BOOT_SIZE_MIB}MiB) 根分区 p${ROOT_PART}@${P2_OFF}B(ext4) swap=${SWAP_MIB}MiB"
+ROOT_OFF=$P2_OFF
+echo "mkimage-770ed: 布局(DOS 几何 63spt/16heads，柱面=$CYL 扇区)"
+echo "  p1@LBA $P1_START  FAT16  $((BOOT_SECT / 2048)) MiB"
+[ "$SWAP_MIB" -gt 0 ] && echo "  p2@LBA $P2_START  swap   ${SWAP_MIB} MiB"
+echo "  p${ROOT_PART}@LBA $((ROOT_OFF / 512))  ext4   （根）"
 
 # ---- 2) 独立 FAT 引导分区 ----
 BOOTIMG=$WORK/boot.img
-mformat -i "$BOOTIMG" -C -v BOOT -T $((BOOT_SIZE_MIB * 2048)) ::
+dd if=/dev/zero of="$BOOTIMG" bs=512 count="$BOOT_SECT" status=none
+# hidden sectors 必须等于分区起始 LBA（63），DOS/老工具靠它算绝对扇区
+mkfs.vfat -F 16 -n BOOT -h "$P1_START" "$BOOTIMG" >/dev/null
 mcopy -i "$BOOTIMG" "$BZIMAGE" ::/bzImage
 cat > "$WORK/grub.cfg" <<EOF
 set timeout=3
@@ -100,8 +123,8 @@ menuentry "Constellation OS (ThinkPad 770ED)" {
 }
 EOF
 cat > "$WORK/menu.lst" <<EOF
-# grub4dos 菜单（grldr 读这个文件）。
-# 内核与 GRUB2 用的是同一个 /bzImage，参数也一致——换引导器不影响系统。
+# grub4dos menu (read by grldr). Same /bzImage and same parameters as the
+# GRUB2 entry -- switching bootloader does not change the system.
 timeout 3
 default 0
 title Constellation OS (ThinkPad 770ED)

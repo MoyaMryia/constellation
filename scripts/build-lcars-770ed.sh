@@ -54,9 +54,17 @@ trap 'rm -rf "$WORK"' EXIT
 TOTAL=$(( $(numfmt --from=iec "$DISK_SIZE") / 512 ))
 BOOT_SECT=$(( BOOT_MIB * 2048 ))
 SWAP_SECT=$(( SWAP_MIB * 2048 ))
-P1_OFF=2048
-P2_OFF=$(( P1_OFF + BOOT_SECT ))
-P3_OFF=$(( P2_OFF + SWAP_SECT ))
+# DOS 时代的几何约定（LCARS 这套本来就是 MS-DOS 血统）：
+#   第一条磁道 63 扇区留给 MBR/引导代码 → p1 从 LBA 63 开始；
+#   后续分区对齐到柱面（63 扇区/磁道 × 16 磁头 = 1008 扇区）。
+SECT_PER_TRACK=63
+HEADS=16
+CYL=$(( SECT_PER_TRACK * HEADS ))
+align_up () { echo $(( (($1 + CYL - 1) / CYL) * CYL )); }
+BOOT_SECT=$(align_up "$BOOT_SECT")
+P1_OFF=$SECT_PER_TRACK
+P2_OFF=$(align_up $(( P1_OFF + BOOT_SECT )))
+P3_OFF=$(align_up $(( P2_OFF + SWAP_SECT )))
 P3_SECT=$(( TOTAL - P3_OFF - 2048 ))
 [ "$P3_SECT" -gt 400000 ] || die "root 分区太小（DISK_SIZE=$DISK_SIZE）"
 
@@ -76,7 +84,8 @@ EOF
 # ---- 2) p1：FAT16 + grub4dos + 内核 ----
 say "制作 p1（FAT16 ${BOOT_MIB}MiB）"
 dd if=/dev/zero of="$WORK/boot.img" bs=512 count=$BOOT_SECT status=none
-mkfs.vfat -F 16 -n "$LABEL_BOOT" "$WORK/boot.img" >/dev/null
+# hidden sectors = 分区起始 LBA（63），DOS 靠它算绝对扇区
+mkfs.vfat -F 16 -n "$LABEL_BOOT" -h "$P1_OFF" "$WORK/boot.img" >/dev/null
 mkdir -p "$WORK/baslin"
 cp "$KERNEL_SRC" "$WORK/baslin/ZIMAGE"
 cp "$INITFS" "$WORK/baslin/INITFS.GZ"
