@@ -8,6 +8,14 @@
 #   4) 三个 s6 服务：console getty / serial getty / udhcpc
 set -e
 
+if [ "$(id -u)" != 0 ]; then
+  echo "build-rootfs-770ed: 需要 root（sudo）。镜像里的文件属主必须是 0:0 ——" >&2
+  echo "  非 root 构建出来的是 uid 1000 的东西，配 setuid 的 busybox 会让" >&2
+  echo "  /sbin/init 的 euid 变成 1000，于是 mount 报 'you must be root'，" >&2
+  echo "  /proc 挂不上、s6 起不来、poweroff 也没反应。" >&2
+  exit 1
+fi
+
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 DEST=${ROOTFS_DEST:-$ROOT/build/rootfs-770ed}
 BB_BIN=$ROOT/busybox/src/busybox-1.38.0/busybox
@@ -277,10 +285,14 @@ cp "$TMPL/usr/bin/mountusb" "$DEST/usr/bin/mountusb"
 [ -f "$ROOT/build/tone" ] && cp "$ROOT/build/tone" "$DEST/usr/bin/tone"
 cp "$TMPL/usr/bin/wifi" "$DEST/usr/bin/wifi"
 cp "$TMPL/usr/bin/apm" "$DEST/usr/bin/apm"
+cp "$TMPL/usr/bin/sudo" "$DEST/usr/bin/sudo"
+mkdir -p "$DEST/usr/sbin"
+cp "$TMPL/usr/sbin/osupdate" "$DEST/usr/sbin/osupdate"
 cp "$TMPL"/usr/share/constellation/*.txt "$DEST/usr/share/constellation/"
 cp "$TMPL/etc/motd" "$DEST/etc/motd"
 chmod 0755 "$DEST/usr/bin/fetch" "$DEST/usr/bin/mountusb" "$DEST/usr/bin/tone" \
-  "$DEST/usr/bin/wifi" "$DEST/usr/bin/apm"
+  "$DEST/usr/bin/wifi" "$DEST/usr/bin/apm" "$DEST/usr/bin/sudo" \
+  "$DEST/usr/sbin/osupdate"
 
 # ---- 电源管理：覆盖 busybox 的 poweroff/reboot/halt ----
 # busybox 的这三个 applet 假设 PID 1 是 busybox init，只给 PID 1 发信号；
@@ -291,6 +303,9 @@ chmod 0755 "$DEST/usr/bin/fetch" "$DEST/usr/bin/mountusb" "$DEST/usr/bin/tone" \
 # 一个 shell 脚本）。所以先 rm 掉，再放真文件。
 for n in poweroff reboot halt shutdown; do
   rm -f "$DEST/sbin/$n"
+  # busybox --list 也在 /bin 建了 poweroff/reboot/halt 软链；/bin 在 PATH 里
+  # 排在 /sbin 前面，不清掉的话仍然命中 busybox 的那个（静默退出）。
+  rm -f "$DEST/bin/$n"
 done
 cp "$TMPL/sbin/poweroff" "$DEST/sbin/poweroff"
 cp "$TMPL/sbin/shutdown" "$DEST/sbin/shutdown"
@@ -299,6 +314,16 @@ ln -sf poweroff "$DEST/sbin/halt"
 for n in poweroff reboot halt shutdown; do
   chmod 0755 "$DEST/sbin/$n"
 done
+# busybox 的 su 依赖 FEATURE_SUID：**busybox 本体**要 setuid root（不是
+# /bin/su 那个软链 —— 对软链 chmod 会作用到目标文件上，之前就这么把 busybox
+# 变成了 4755，而它属主是 uid 1000，结果 root 一执行 busybox 就被降权成 1000）。
+chmod 0755 "$DEST/bin/busybox"
+if [ "$(stat -c %u "$DEST/bin/busybox")" = 0 ]; then
+  chmod 4755 "$DEST/bin/busybox"
+else
+  echo "build-rootfs: 警告：/bin/busybox 不是 root 所有，跳过 setuid" >&2
+fi
+
 # 自检：busybox 必须还是 ELF（别被上面的 cp 之类误伤）
 head -c 4 "$DEST/bin/busybox" | grep -q ELF || {
   echo "build-rootfs: /bin/busybox 被破坏了（不是 ELF）" >&2; exit 1; }
@@ -321,7 +346,8 @@ for entry in $EXTRA_USERS; do
   hash=${entry#*:}
   case "$name" in ''|*[!a-z0-9_-]*) echo "跳过非法用户名：$name" >&2; continue ;; esac
   mkdir -p "$DEST/home/$name"
-  chmod 0700 "$DEST/home/$name"
+  chmod 0755 "$DEST/home/$name"
+  chown "$uid:$uid" "$DEST/home/$name" 2>/dev/null || true
   printf '%s:x:%s:%s:%s:/home/%s:/bin/sh\n' "$name" "$uid" "$uid" "$name" "$name" >> "$DEST/etc/passwd"
   printf '%s:x:%s:\n' "$name" "$uid" >> "$DEST/etc/group"
   printf '%s:%s:19000:0:99999:7:::\n' "$name" "$hash" >> "$DEST/etc/shadow"
@@ -361,6 +387,47 @@ tmpfs             /tmp     tmpfs     mode=1777,nosuid,nodev,size=16M 0      0
 FSTAB
 
 # udev 缺席时的惯例：/dev/fd 等由 devtmpfs 提供；/var/log 留空目录。
+
+# 整棵树的属主必须是 0:0（mke2fs -d 会把属主带进镜像）——必须在 chown 之后
+# 再给 busybox 加 setuid，否则前面那次 chmod 因为属主还不是 root 被跳过了。
+chown -R 0:0 "$DEST" 2>/dev/null || true
+chmod 0755 "$DEST/bin/busybox"
+chmod 4755 "$DEST/bin/busybox"
+
+# setuid 的 sudo 助手：属主必须是 root，位必须是 4755
+if [ -x "$ROOT/build/dopower" ]; then
+  mkdir -p "$DEST/usr/libexec"
+  install -m 0755 -o 0 -g 0 "$ROOT/build/dopower" "$DEST/usr/libexec/dopower"
+fi
+if [ -x "$ROOT/build/dosudo" ]; then
+  mkdir -p "$DEST/usr/libexec"
+  install -m 4755 -o 0 -g 0 "$ROOT/build/dosudo" "$DEST/usr/libexec/dosudo"
+fi
+# /etc/constellation/sudoers：一行一个允许 sudo 的用户
+mkdir -p "$DEST/etc/constellation"
+{
+  echo "# users allowed to run commands as root through /usr/bin/sudo"
+  echo "root"
+  for u in ${EXTRA_USERS:-}; do
+    echo "${u%%:*}"
+  done
+} > "$DEST/etc/constellation/sudoers"
+chown 0:0 "$DEST/etc/constellation/sudoers"
+chmod 0640 "$DEST/etc/constellation/sudoers"
+# 自检：busybox 必须是 root 所有 + setuid，否则 su/sudo 不工作
+[ "$(stat -c %u "$DEST/bin/busybox")" = 0 ] || { echo "build-rootfs: busybox 属主不对" >&2; exit 1; }
+
+# 家目录必须属于用户本人（chown -R 0:0 会把它们也改成 root，
+# 否则 login 报 "can't change directory to /home/xxx: Permission denied"）
+for u in ${EXTRA_USERS:-}; do
+  name=${u%%:*}
+  uid=$(awk -F: -v n="$name" '$1 == n { print $3 }' "$DEST/etc/passwd")
+  [ -n "$uid" ] || continue
+  if [ -d "$DEST/home/$name" ]; then
+    chown -R "$uid:$uid" "$DEST/home/$name"
+    chmod 0755 "$DEST/home/$name"
+  fi
+done
 
 echo "770ED rootfs written: $DEST"
 echo "  modules: $(find "$DEST/lib/modules" -name '*.ko' | wc -l) 个"

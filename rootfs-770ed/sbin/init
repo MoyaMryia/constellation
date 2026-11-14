@@ -30,6 +30,7 @@ mountpoint -q /sys  || mount -t sysfs sysfs /sys
 mkdir -p /dev/pts
 mountpoint -q /dev/pts || mount -t devpts devpts /dev/pts -o gid=5,mode=0620
 
+
 grep -q '^proc /proc proc' /proc/mounts || exec sh
 grep -q '^sysfs /sys sysfs' /proc/mounts || exec sh
 
@@ -51,6 +52,12 @@ fi
 # Coldplug: populate device nodes that already existed at boot time (CardBus
 # slots, USB ports).
 /bin/mdev -s 2>/dev/null || true
+
+# Order matters: this must run AFTER "mdev -s". mdev recreates nodes according
+# to /etc/mdev.conf and resets the modes (that is how /dev/null went back to 0660).
+for d in null zero full random urandom tty; do
+  [ -c "/dev/$d" ] && chmod 666 "/dev/$d" 2>/dev/null
+done
 
 # Drivers for the fixed on-board devices. All are modules; order does not
 # matter and failures are harmless:

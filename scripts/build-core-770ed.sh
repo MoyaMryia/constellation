@@ -178,6 +178,14 @@ cp "$BUSYBOX_SRC/.config" "$ROOT/busybox/configs/busybox-1.38.0-770ed.config"
   -Os -static -o "$ROOT/build/tone" "$ROOT/tools/tone.c" -lm
 "$MUSL_PREFIX/bin/i486-linux-musl-strip" "$ROOT/build/mixer" "$ROOT/build/tone"
 
+# ---------- 3c) sudo 助手（setuid root，由 build-rootfs 装成 4755） ----------
+"$CC_WRAP" -m32 -march=i486 -Os -static -o "$ROOT/build/dosudo" "$ROOT/tools/dosudo.c"
+"$MUSL_PREFIX/bin/i486-linux-musl-strip" "$ROOT/build/dosudo"
+
+# ---------- 3d) dopower（直接 reboot(2)，绕开 busybox 的 SUID 机制） ----------
+"$CC_WRAP" -m32 -march=i486 -Os -static -o "$ROOT/build/dopower" "$ROOT/tools/dopower.c"
+"$MUSL_PREFIX/bin/i486-linux-musl-strip" "$ROOT/build/dopower"
+
 # ---------- 4) 内核（770ED 配置） ----------
 cp "$KCONFIG" "$KERNEL_SRC/.config"
 make -s -C "$KERNEL_SRC" ARCH=i386 HOSTCC="$HOSTCC" CC="$HOSTCC" olddefconfig

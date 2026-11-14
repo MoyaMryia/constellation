@@ -14,6 +14,16 @@ sync
 mount -o remount,ro / 2>/dev/null
 sync
 
+if [ -x /usr/libexec/dopower ]; then
+  if [ -e /run/constellation-reboot ]; then
+    exec /usr/libexec/dopower reboot
+  elif [ -e /run/constellation-halt ]; then
+    exec /usr/libexec/dopower halt
+  else
+    exec /usr/libexec/dopower poweroff
+  fi
+fi
+
 if [ -e /run/constellation-reboot ]; then
   exec /bin/busybox reboot -f
 elif [ -e /run/constellation-halt ]; then

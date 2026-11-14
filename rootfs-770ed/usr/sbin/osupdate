@@ -1,0 +1,173 @@
+#!/bin/sh
+# osupdate -- install an OS/package update from a .upd bundle (USB stick or path).
+#
+# Bundle format (produced by scripts/make-osupdate-770ed.sh):
+#   VERSION           plain text: version, build date, kernel, file count
+#   MANIFEST          "<sha256>  <path>" lines, paths relative to /
+#   <paths...>        the actual files (same relative layout as the root fs)
+#
+# Behaviour:
+#   * verifies every file against MANIFEST BEFORE touching the system
+#   * backs up every file it replaces to /var/backups/osupdate-<stamp>/
+#   * writes files via tmp+rename, so an interrupted update leaves whole files
+#   * logs to /var/lib/constellation/osupdate.log
+#
+# Usage:
+#   osupdate                 apply the newest *.upd found on the USB stick
+#   osupdate --list          show bundles on the stick without applying
+#   osupdate --dry-run       verify + show what would change, touch nothing
+#   osupdate --from PATH     apply a specific bundle
+#   osupdate --rollback DIR  restore the files saved in a backup directory
+set -u
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
+USB=/media/usb
+BKROOT=/var/backups
+LOGDIR=/var/lib/constellation
+LOG=$LOGDIR/osupdate.log
+
+say() { echo "osupdate: $*"; }
+die() { echo "osupdate: $*" >&2; exit 1; }
+
+mkdir -p "$LOGDIR" "$BKROOT"
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG" 2>/dev/null; }
+
+# ---- find the bundle ------------------------------------------------------
+bundle=
+case ${1:-} in
+  --from) bundle=${2:-}; [ -n "$bundle" ] || die "--from needs a path" ;;
+esac
+
+find_bundles() {
+  dirs="$USB /media /mnt"
+  for d in $dirs; do
+    [ -d "$d" ] || continue
+    find "$d" -maxdepth 2 -name 'constellation-*.upd' -o -maxdepth 2 -name '*.upd' 2>/dev/null
+  done | sort -u
+}
+
+if [ -z "$bundle" ]; then
+  bundles=$(find_bundles)
+  [ -n "$bundles" ] || {
+    say "no *.upd bundle found on the USB stick ($USB)"
+    say "  plug the stick in, or use: osupdate --from /path/to/x.upd"
+    exit 1; }
+  echo "bundles found:"
+  echo "$bundles" | while read -r b; do
+    [ -n "$b" ] || continue
+    v=$(tar -xzOf "$b" VERSION 2>/dev/null | head -n 3 | tr '\n' ' ')
+    printf '  %s\n    %s\n' "$b" "$v"
+  done
+  case ${1:-} in
+    --list) exit 0 ;;
+  esac
+  bundle=$(echo "$bundles" | tail -n 1)
+  case ${1:-} in
+    --from) ;;
+    *) say "using $bundle" ;;
+  esac
+fi
+[ -f "$bundle" ] || die "bundle not found: $bundle"
+
+# ---- verify into a temp dir ----------------------------------------------
+TMP=$(mktemp -d /tmp/osupdate.XXXXXX) || die "mktemp failed"
+trap 'rm -rf "$TMP"' EXIT HUP INT TERM
+
+say "extracting $bundle ..."
+tar -xzf "$bundle" -C "$TMP" || die "cannot extract (corrupt bundle?)"
+[ -f "$TMP/MANIFEST" ] || die "bundle has no MANIFEST"
+
+say "verifying checksums ..."
+( cd "$TMP" && sha256sum -c MANIFEST --quiet 2>/dev/null ) || {
+  bad=$( cd "$TMP" && sha256sum -c MANIFEST 2>/dev/null | grep -c 'FAILED' )
+  die "checksum verification failed ($bad bad files) -- nothing changed"
+}
+
+ver=$(head -n 1 "$TMP/VERSION" 2>/dev/null)
+say "bundle OK: ${ver:-unknown version}"
+
+# ---- plan ---------------------------------------------------------------
+changed=0; added=0
+plan=
+while read -r sum path; do
+  [ -n "${path:-}" ] || continue
+  case $path in MANIFEST|VERSION) continue ;; esac
+  [ -f "$TMP/$path" ] || continue
+  if [ -f "/$path" ]; then
+    if [ "$(sha256sum "/$path" 2>/dev/null | cut -d' ' -f1)" = "$sum" ]; then
+      continue                     # identical, skip
+    fi
+    plan="$plan M $path"; changed=$((changed + 1))
+  else
+    plan="$plan A $path"; added=$((added + 1))
+  fi
+done < "$TMP/MANIFEST"
+
+say "$changed file(s) to replace, $added new file(s)"
+if [ "${1:-}" = "--dry-run" ]; then
+  echo "$plan" | awk '{ for (i = 1; i <= NF; i += 2) print "  " $i, $(i+1) }' | head -n 40
+  say "dry run: nothing was changed"
+  exit 0
+fi
+[ "$changed" = 0 ] && [ "$added" = 0 ] && { say "already up to date"; exit 0; }
+
+# ---- rollback (restore a previous backup dir) ----------------------------
+if [ "${1:-}" = "--rollback" ]; then
+  src=${2:-}
+  [ -n "$src" ] || die "--rollback needs a backup directory"
+  [ -d "$src" ] || die "no such backup directory: $src"
+  n=0
+  ( cd "$src" && find . -type f ) | while read -r f; do
+    rel=${f#./}
+    mkdir -p "/$(dirname "$rel")" 2>/dev/null
+    if cp "$src/$rel" "/$rel.osupdate.tmp" 2>/dev/null && mv -f "/$rel.osupdate.tmp" "/$rel"; then
+      log "rolled back $rel"
+      n=$((n + 1))
+    else
+      echo "osupdate: rollback failed for /$rel" >&2
+    fi
+  done
+  sync
+  say "rollback from $src complete"
+  exit 0
+fi
+
+# ---- apply --------------------------------------------------------------
+stamp=$(date '+%Y%m%d-%H%M%S')
+bk=$BKROOT/osupdate-$stamp
+mkdir -p "$bk"
+say "backup dir: $bk"
+
+fail=0
+# busybox has no paste: use awk to turn "A p1 M p2 ..." into "A p1" lines
+echo "$plan" | awk '{ for (i = 1; i <= NF; i += 2) print $i, $(i+1) }' > "$TMP/.plan"
+
+while read -r act path; do
+  [ -n "${path:-}" ] || continue
+  case $path in
+    /*|../*|*/../*) die "refusing unsafe path in manifest: $path" ;;
+  esac
+  dir=$(dirname "/$path")
+  mkdir -p "$dir" 2>/dev/null || true
+  if [ "$act" = "M" ]; then
+    mkdir -p "$bk/$(dirname "$path")" 2>/dev/null
+    cp -p "/$path" "$bk/$path" 2>/dev/null || true
+  fi
+  if cp "$TMP/$path" "$dir/.osupdate.tmp" 2>/dev/null && mv -f "$dir/.osupdate.tmp" "/$path"; then
+    log "installed $path ($act)"
+  else
+    echo "osupdate: failed to install /$path" >&2
+    log "FAILED $path"
+    fail=$((fail + 1))
+  fi
+done < "$TMP/.plan"
+
+sync
+log "update applied from $bundle: $changed replaced, $added added, $fail failed"
+if [ "$fail" -gt 0 ]; then
+  say "$fail file(s) failed; backups in $bk"
+  say "roll back with: osupdate --rollback $bk"
+  exit 1
+fi
+say "done. if the kernel or boot files changed, reboot to use them."
+say "roll back with: osupdate --rollback $bk"

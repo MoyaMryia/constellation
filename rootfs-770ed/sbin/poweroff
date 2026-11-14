@@ -42,6 +42,12 @@ umount -a -r 2>/dev/null
 mount -o remount,ro / 2>/dev/null
 sync
 
+# Call reboot(2) directly. Not busybox: it is setuid here, and its SUID
+# machinery makes applets exit silently (this is why poweroff did nothing).
+if [ -x /usr/libexec/dopower ]; then
+  exec /usr/libexec/dopower "$ACTION"
+fi
+# Fallback when dopower is missing
 case $ACTION in
   reboot) exec /bin/busybox reboot -f ;;
   halt)   exec /bin/busybox halt -f ;;

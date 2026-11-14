@@ -1,0 +1,12 @@
+#!/bin/sh
+# sudo -- thin wrapper around the setuid helper /usr/libexec/dosudo.
+#
+#   sudo command args...
+#   sudo -s             (root shell)
+#
+# The helper checks the caller against /etc/constellation/sudoers and then
+# setuid(0)s and execs the command. No PAM, no password: this is a single-user
+# machine and musl's crypt() is a stub, so a password-checking sudo would be
+# theatre. Keep /etc/constellation/sudoers mode 0640 root:root.
+set -u
+exec /usr/libexec/dosudo "$@"
