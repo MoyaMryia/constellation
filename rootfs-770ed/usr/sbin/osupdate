@@ -29,6 +29,34 @@ LOG=$LOGDIR/osupdate.log
 say() { echo "osupdate: $*"; }
 die() { echo "osupdate: $*" >&2; exit 1; }
 
+usage() {
+  cat <<'USAGE'
+osupdate -- install a Constellation OS .upd bundle from a USB stick
+
+  osupdate                  apply the newest bundle found under /media/usb
+  osupdate --list           list bundles found, with their VERSION line
+  osupdate --dry-run        verify checksums, show what would change
+  osupdate --from PATH      apply a specific bundle
+  osupdate --rollback DIR   restore the files saved in a backup directory
+  osupdate --help           this text
+
+Behaviour:
+  Every file is verified against MANIFEST before anything is touched. Each
+  replaced file is copied to /var/backups/osupdate-<stamp>/ first, and every
+  write goes tmp+rename, so an interrupted update leaves whole files.
+  The log is /var/lib/constellation/osupdate.log.
+
+Space:
+  A full rootfs bundle is 38 MiB compressed and about 100 MiB unpacked. The
+  work directory is /var/tmp, on the root filesystem -- /tmp is a 16 MiB
+  tmpfs and cannot hold it. Set WORKDIR=/some/dir to use another place.
+USAGE
+}
+
+case ${1:-} in
+  -h|--help) usage; exit 0 ;;
+esac
+
 mkdir -p "$LOGDIR" "$BKROOT"
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG" 2>/dev/null; }
 
@@ -69,6 +97,16 @@ find_bundles() {
 
 if [ -z "$bundle" ]; then
   bundles=$(find_bundles)
+  # Nothing found: the stick may be plugged in but not mounted. There is no
+  # udev in this image, so mount it by hand (mountusb is the same script the
+  # login banner advertises) and look again.
+  if [ -z "$bundles" ] && [ -x /usr/bin/mountusb ]; then
+    if ! mountpoint -q "$USB" 2>/dev/null; then
+      say "no bundle found; trying to mount the USB stick"
+      /usr/bin/mountusb >/dev/null 2>&1 || true
+      bundles=$(find_bundles)
+    fi
+  fi
   [ -n "$bundles" ] || {
     say "no *.upd bundle found on the USB stick ($USB)"
     say "  plug the stick in, or use: osupdate --from /path/to/x.upd"
@@ -76,13 +114,20 @@ if [ -z "$bundle" ]; then
   echo "bundles found:"
   echo "$bundles" | while read -r b; do
     [ -n "$b" ] || continue
-    v=$(tar -xzOf "$b" VERSION 2>/dev/null | head -n 3 | tr '\n' ' ')
+    # The archive stores "./VERSION"; plain "VERSION" does not match.
+    v=$(tar -xzOf "$b" ./VERSION 2>/dev/null | head -n 3 | tr '\n' ' ')
+    [ -n "$v" ] || v=$(tar -xzOf "$b" VERSION 2>/dev/null | head -n 3 | tr '\n' ' ')
     printf '  %s\n    %s\n' "$b" "$v"
   done
   case ${1:-} in
     --list) exit 0 ;;
   esac
-  bundle=$(echo "$bundles" | tail -n 1)
+  # Newest by modification time. Names carry a date, but mtime is the fact.
+  bundle=$(echo "$bundles" | while read -r b; do
+             [ -n "$b" ] || continue
+             echo "$(stat -c %Y "$b" 2>/dev/null || echo 0) $b"
+           done | sort -n | tail -n 1 | cut -d' ' -f2-)
+  [ -n "$bundle" ] || bundle=$(echo "$bundles" | tail -n 1)
   case ${1:-} in
     --from) ;;
     *) say "using $bundle" ;;
@@ -90,12 +135,36 @@ if [ -z "$bundle" ]; then
 fi
 [ -f "$bundle" ] || die "bundle not found: $bundle"
 
-# ---- verify into a temp dir ----------------------------------------------
-TMP=$(mktemp -d /tmp/osupdate.XXXXXX) || die "mktemp failed"
+# ---- verify into a work dir ---------------------------------------------
+# NOT /tmp: init mounts a 16 MiB tmpfs there, and a full rootfs bundle unpacks
+# to about 100 MiB. /var/tmp lives on the root filesystem, which has the room.
+WORKDIR=${WORKDIR:-/var/tmp}
+mkdir -p "$WORKDIR" 2>/dev/null || WORKDIR=/var
+TMP=$(mktemp -d "$WORKDIR/osupdate.XXXXXX") || die "mktemp failed in $WORKDIR"
 trap 'rm -rf "$TMP"' EXIT HUP INT TERM
 
+# Preflight: a 38 MiB bundle becomes ~100 MiB on disk. Fail before extracting,
+# not halfway through with "cannot extract".
+need=$(tail -c 4 "$bundle" | od -An -tu4 | tr -d ' \n')
+case $need in ''|*[!0-9]*) need=0 ;; esac
+if [ "$need" -gt 0 ]; then
+  need=$((need / 1024 + 2048))          # KiB, plus 2 MiB of slack
+  avail=$(df -k "$WORKDIR" 2>/dev/null | awk 'NR == 2 { print $4 }')
+  case $avail in ''|*[!0-9]*) avail=0 ;; esac
+  if [ "$avail" -gt 0 ] && [ "$need" -gt "$avail" ]; then
+    die "not enough space in $WORKDIR: need ${need} KiB, ${avail} KiB free"
+  fi
+  say "work dir $TMP (needs ${need} KiB, ${avail} KiB free)"
+fi
+
 say "extracting $bundle ..."
-tar -xzf "$bundle" -C "$TMP" || die "cannot extract (corrupt bundle?)"
+if ! tar -xzf "$bundle" -C "$TMP"; then
+  avail=$(df -k "$TMP" 2>/dev/null | awk 'NR == 2 { print $4 }')
+  [ -n "$avail" ] && avail="$avail KiB free in $TMP" || avail="$TMP"
+  die "cannot extract $bundle ($avail). Either the bundle is truncated --
+  check sha256 of the copy on the stick against the host build -- or the
+  medium is full. A stick removed without umounting gives a truncated file."
+fi
 [ -f "$TMP/MANIFEST" ] || die "bundle has no MANIFEST"
 
 say "verifying checksums ..."
