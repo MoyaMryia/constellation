@@ -1,14 +1,15 @@
 #!/bin/sh
 # wifi -- tiny Wi-Fi helper for the BCM4318 (b43) / any wext-capable card.
 #
-#   wifi                 scan and list access points
-#   wifi scan            same
-#   wifi connect SSID [PASSPHRASE]
-#   wifi status
-#   wifi down
+#   wifi                      scan and list access points
+#   wifi scan                 same
+#   wifi connect SSID [PASS]  join a network (WPA/WPA2-PSK, or open/WEP
+#                             when no passphrase is given) and run DHCP
+#   wifi status               driver state, ESSID, access point, address
+#   wifi down                 stop wpa_supplicant and take the link down
 #
 # WPA/WPA2-PSK is handled by wpa_supplicant (wext driver, internal TLS);
-# open/WEP networks fall back to iwconfig. DHCP is done with udhcpc.
+# open/WEP networks use iwconfig. DHCP is done with udhcpc.
 set -u
 PATH=/bin:/sbin:/usr/bin:/usr/sbin
 CONF=/etc/wpa_supplicant/wpa_supplicant.conf
@@ -34,26 +35,60 @@ iface() {
   return 1
 }
 
+# b43 loads firmware when the interface goes up; on a 266 MHz machine that
+# takes a moment. Say why nothing showed up instead of printing an empty list.
+no_card_hint() {
+  if ! ls /lib/firmware/b43/*.fw >/dev/null 2>&1; then
+    echo "wifi: no b43 firmware in /lib/firmware/b43" >&2
+  else
+    echo "wifi: card present but not ready -- try:" >&2
+    echo "        dmesg | grep -iE 'b43|ssb|80211'" >&2
+  fi
+}
+
+# Wait until the driver reports an associated ESSID (up to $1 seconds).
+wait_assoc() {
+  i=$1; limit=$2; n=0
+  while [ "$n" -lt "$limit" ]; do
+    case "$(iwconfig "$i" 2>/dev/null)" in
+      *ESSID:\"*\") return 0 ;;
+    esac
+    n=$((n + 1))
+    /bin/sleep 1
+  done
+  return 1
+}
+
 cmd=${1:-scan}
 case $cmd in
   scan)
-    i=$(iface) || { echo "wifi: no wireless interface (is the card inserted? modprobe b43)"; exit 1; }
+    i=$(iface) || { echo "wifi: no wireless interface -- is the card inserted?"; no_card_hint; exit 1; }
     ip link set "$i" up 2>/dev/null
+    /bin/sleep 1
     echo "wifi: scanning on $i ..."
-    iwlist "$i" scan 2>/dev/null | awk '
+    out=$(iwlist "$i" scan 2>/dev/null)
+    if [ -z "$out" ]; then
+      echo "wifi: scan returned nothing"
+      no_card_hint
+      exit 1
+    fi
+    echo "$out" | awk '
       /Cell [0-9]+ - Address/ { essid = ""; sig = ""; enc = "open" }
       /ESSID:/ { sub(/.*ESSID:/, ""); gsub(/"/, ""); essid = $0 }
       /Signal level/ { sub(/.*Signal level[=:]/, ""); sig = $0 }
       /Encryption key:on/ { enc = "WPA/WEP" }
       /^ *$/ { if (essid != "") printf "  %-24s %-12s %s\n", essid, sig, enc }
       END { if (essid != "") printf "  %-24s %-12s %s\n", essid, sig, enc }
-    ' | head -n 15
+    ' | head -n 20
     ;;
   connect)
     [ $# -ge 2 ] || { echo "usage: wifi connect SSID [PASSPHRASE]"; exit 1; }
     ssid=$2; psk=${3:-}
-    i=$(iface) || { echo "wifi: no wireless interface"; exit 1; }
+    i=$(iface) || { echo "wifi: no wireless interface -- is the card inserted?"; no_card_hint; exit 1; }
     ip link set "$i" up 2>/dev/null
+    # A supplicant left over from an earlier connect owns the interface and
+    # would ignore a plain iwconfig. Kill it in both branches.
+    killall wpa_supplicant 2>/dev/null
     if [ -n "$psk" ]; then
       mkdir -p /var/run/wpa_supplicant
       cat > "$CONF" <<WCONF
@@ -66,14 +101,20 @@ network={
 }
 WCONF
       chmod 0600 "$CONF"
-      killall wpa_supplicant 2>/dev/null
       wpa_supplicant -B -i "$i" -c "$CONF" || { echo "wifi: wpa_supplicant failed"; exit 1; }
-      echo "wifi: WPA supplicant started on $i"
+      echo "wifi: WPA supplicant started on $i, waiting for association ..."
     else
       echo "wifi: no passphrase given -- trying open network"
       iwconfig "$i" essid "$ssid" 2>/dev/null
     fi
-    sleep 2
+    # Do not hand out a DHCP request before the card associated: udhcpc would
+    # burn its retries and report a failure that is really just a slow b43.
+    if wait_assoc "$i" 20; then
+      echo "wifi: associated with $ssid"
+    else
+      echo "wifi: still not associated after 20 s (wrong passphrase? out of range?)" >&2
+      no_card_hint
+    fi
     echo "wifi: requesting DHCP lease ..."
     udhcpc -n -q -i "$i" || echo "wifi: DHCP failed (try: udhcpc -i $i)"
     ;;
