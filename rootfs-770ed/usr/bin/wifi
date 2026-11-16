@@ -13,6 +13,17 @@ set -u
 PATH=/bin:/sbin:/usr/bin:/usr/sbin
 CONF=/etc/wpa_supplicant/wpa_supplicant.conf
 
+# Every subcommand needs root: "ip link set", "killall wpa_supplicant",
+# "iwlist scan" and udhcpc all need CAP_NET_ADMIN, and $CONF is 0600 root.
+# Re-exec through sudo so a normal user can just type "wifi connect SSID".
+if [ "$(id -u)" != 0 ]; then
+  if [ -x /usr/bin/sudo ]; then
+    exec /usr/bin/sudo /usr/bin/wifi "$@"
+  fi
+  echo "wifi: needs root (try: sudo wifi $*)" >&2
+  exit 1
+fi
+
 iface() {
   for d in /sys/class/net/*; do
     n=${d##*/}

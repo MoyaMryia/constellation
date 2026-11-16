@@ -78,16 +78,40 @@ for m in tridentfb snd-cs4236 snd-mixer-oss snd-pcm-oss floppy zram ppp_generic 
   /sbin/modprobe -q "$m" 2>/dev/null || true
 done
 
-# Coldplug: PCI/USB/PnP devices that existed before boot will not send another
-# uevent (the hotplug helper was only installed just now), so walk their
-# modalias files and modprobe each one -- this is the entire equivalent of udev
-# coldplug in this image. CardBus NICs, USB cards and external displays are all
-# picked up by their drivers here.
-for mf in /sys/bus/pci/devices/*/modalias /sys/bus/usb/devices/*/modalias \
-          /sys/bus/pnp/devices/*/modalias /sys/bus/pcmcia/devices/*/modalias; do
-  [ -r "$mf" ] || continue
-  /sbin/modprobe -q "$(cat "$mf")" 2>/dev/null || true
-done
+# Coldplug: PCI/USB/PnP/PCMCIA devices that existed before boot never send a
+# uevent, so walk their modalias files and load the matching driver by hand.
+#
+# BusyBox modprobe cannot resolve a modalias on its own -- given
+# "pci:v00001022d00002000sv..." it answers "not found in modules.dep". Only
+# the real kmod/libkmod does alias lookup. So do the lookup here: match each
+# modalias against modules.alias, then modprobe the module name it names.
+# Without this a CardBus NIC is never claimed by its driver, and the machine
+# ends up with no network until somebody types "modprobe 3c59x" by hand.
+ALIASFILE=$(ls /lib/modules/*/modules.alias 2>/dev/null | head -n 1)
+if [ -n "$ALIASFILE" ]; then
+  : > /tmp/.modalias
+  for mf in /sys/bus/pci/devices/*/modalias /sys/bus/usb/devices/*/modalias \
+            /sys/bus/pnp/devices/*/modalias /sys/bus/pcmcia/devices/*/modalias; do
+    [ -r "$mf" ] && cat "$mf" >> /tmp/.modalias
+  done
+  sort -u /tmp/.modalias > /tmp/.modalias.u 2>/dev/null || :
+  # modules.alias patterns are globs; turn them into anchored regexes.
+  awk '
+    NR == FNR { dev[++n] = $0; next }
+    $1 == "alias" {
+      r = $2
+      gsub(/\./, "\\.", r)
+      gsub(/\*/, ".*", r)
+      for (i = 1; i <= n; i++)
+        if (dev[i] ~ "^" r "$") { print $3; break }
+    }
+  ' /tmp/.modalias.u "$ALIASFILE" | sort -u > /tmp/.coldplug 2>/dev/null || :
+  while read -r m; do
+    [ -n "$m" ] || continue
+    /sbin/modprobe -q "$m" 2>/dev/null || true
+  done < /tmp/.coldplug
+  rm -f /tmp/.modalias /tmp/.modalias.u /tmp/.coldplug
+fi
 
 # Real swap partition (mkimage passes cswap=/dev/sdaX on the command line).
 # Only ever use what the command line says -- never guess the device: whether the

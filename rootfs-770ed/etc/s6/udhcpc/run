@@ -1,20 +1,56 @@
 #!/bin/sh
-# Wired DHCP: the interface name is decided by the kernel (a CardBus NIC shows
-# up as eth0; the 770ED has no built-in Ethernet). Give hotplug 5 seconds to
-# bind the driver, then pick the first non-lo interface.
-for i in 1 2 3 4 5; do
-  iface=
+# Wired DHCP. The 770ED has no built-in Ethernet, so the interface only exists
+# after a CardBus/PCMCIA NIC is inserted and its driver binds. Poll for it
+# instead of sleeping for an hour: a card inserted ten minutes after boot gets
+# a lease within seconds.
+#
+# Wireless interfaces are skipped on purpose -- /usr/bin/wifi runs its own
+# udhcpc, and two clients on one interface would fight over the address.
+set -u
+
+SCRIPT=/etc/udhcpc.script
+
+# Print the first wired interface that has a device behind it. Interfaces
+# without /sys/class/net/<n>/device are virtual (lo, bridges, dummy).
+find_wired() {
   for d in /sys/class/net/*; do
     n=${d##*/}
     [ "$n" = lo ] && continue
-    iface=$n
-    break
+    [ -e "$d/wireless" ] && continue
+    [ -e "$d/phy80211" ] && continue
+    [ -e "$d/device" ] || continue
+    echo "$n"
+    return 0
   done
-  [ -n "$iface" ] && break
-  /bin/sleep 1
-done
-[ -n "$iface" ] || exec /bin/sleep 3600
+  return 1
+}
 
-/bin/ip link set "$iface" up
-echo "constellation: udhcpc on $iface"
-exec /bin/udhcpc -f -i "$iface" -s /etc/udhcpc.script
+while :; do
+  iface=$(find_wired) || { /bin/sleep 2; continue; }
+
+  /bin/ip link set "$iface" up 2>/dev/null
+
+  # Wait up to 10 seconds for link. udhcpc on a dead link only spams the log.
+  # A driver that exports no carrier file counts as "link may be up".
+  link=0
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if [ ! -e "/sys/class/net/$iface/carrier" ]; then
+      link=1
+      break
+    fi
+    if [ "$(cat "/sys/class/net/$iface/carrier" 2>/dev/null)" = 1 ]; then
+      link=1
+      break
+    fi
+    /bin/sleep 1
+  done
+  [ "$link" = 1 ] || { /bin/sleep 2; continue; }
+
+  echo "constellation: udhcpc on $iface"
+  # -f keeps udhcpc in the foreground so s6 supervises it; it retries on its
+  # own while the cable stays plugged.
+  /bin/udhcpc -f -i "$iface" -s "$SCRIPT"
+
+  # udhcpc returned: interface vanished or the lease loop gave up. Re-scan.
+  /bin/sleep 3
+done
