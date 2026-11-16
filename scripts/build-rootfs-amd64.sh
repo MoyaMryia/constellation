@@ -57,6 +57,8 @@ for svc in getty-console getty-serial udhcpc; do
   chmod 0755 "$DEST/etc/s6/$svc/run"
 done
 cp "$ROOT/rootfs/etc/udhcpc.script" "$DEST/etc/udhcpc.script"
+mkdir -p "$DEST/usr/share/udhcpc"
+cp "$ROOT/rootfs/etc/udhcpc.script" "$DEST/usr/share/udhcpc/default.script"
 cp "$TMPL/etc/securetty" "$DEST/etc/securetty"
 chmod 0755 "$DEST/sbin/init" "$DEST/etc/udhcpc.script"
 

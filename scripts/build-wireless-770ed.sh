@@ -90,6 +90,16 @@ WCONF
   cd "$SRCROOT"
 fi
 
+# wpa_passphrase：把口令算成 psk 的小工具，调试"口令对不对"时唯一可靠的对照。
+# 静态链，免得再依赖 musl 的动态装载器；.config 与 wpa_supplicant 共用。
+if [ ! -x "$SRCROOT/wpa_supplicant-2.10/wpa_supplicant/wpa_passphrase" ]; then
+  echo "wl: 编 wpa_passphrase（静态）"
+  ( cd "$SRCROOT/wpa_supplicant-2.10/wpa_supplicant" \
+    && make -j"$JOBS" CC=i486-linux-musl-gcc LDFLAGS=-static \
+         EXTRA_CFLAGS="$CFLAGS_COMMON -static -I$UAPI" wpa_passphrase >/dev/null 2>&1 ) || {
+      echo "wl: wpa_passphrase 构建失败" >&2; exit 1; }
+fi
+
 # ---- 安装到 rootfs ----
 echo "wl: 安装到 $DEST"
 mkdir -p "$DEST/usr/sbin" "$DEST/usr/bin" "$DEST/etc/wpa_supplicant" "$DEST/var/run/wpa_supplicant"
@@ -104,6 +114,8 @@ for t in iwconfig iwlist iwgetid iwspy iwevent; do
 done
 install -m 0755 "$SRCROOT/wpa_supplicant-2.10/wpa_supplicant/wpa_supplicant" \
   "$DEST/usr/sbin/wpa_supplicant"
+install -m 0755 "$SRCROOT/wpa_supplicant-2.10/wpa_supplicant/wpa_passphrase" \
+  "$DEST/usr/bin/wpa_passphrase"
 
 if [ ! -f "$DEST/etc/wpa_supplicant/wpa_supplicant.conf" ]; then
   # NOTE: keep this file pure ASCII -- the target has no CJK fonts.

@@ -100,6 +100,11 @@ cp -a "$TMPL/etc/ppp/." "$DEST/etc/ppp/"
 cp "$TMPL/etc/mdev.conf" "$DEST/etc/mdev.conf"
 cp "$TMPL"/etc/modprobe.d/*.conf "$DEST/etc/modprobe.d/"
 cp "$ROOT/rootfs/etc/udhcpc.script" "$DEST/etc/udhcpc.script"
+# udhcpc 不带 -s 时读 /usr/share/udhcpc/default.script。这里留一份真实副本
+# （不是软链：osupdate 只搬普通文件），手工敲 "udhcpc -i wlan0" 才有 IP。
+mkdir -p "$DEST/usr/share/udhcpc"
+cp "$ROOT/rootfs/etc/udhcpc.script" "$DEST/usr/share/udhcpc/default.script"
+chmod 0755 "$DEST/etc/udhcpc.script" "$DEST/usr/share/udhcpc/default.script"
 
 # X11 桌面（可选）：Xorg + IceWM + xterm + ppp + 字体，来自 Alpine x86 仓库
 # （i386 + musl，与本工程用户空间同 ABI）。见 scripts/alpine-x86-770ed.py。

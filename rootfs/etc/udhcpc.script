@@ -1,22 +1,49 @@
 #!/bin/sh
-# Minimal DHCP hook. BusyBox udhcpc supplies interface, ip, subnet, router and dns.
+# udhcpc hook -- run by BusyBox udhcpc on deconfig / bound / renew.
+#
+# Installed twice on purpose:
+#   /etc/udhcpc.script                  what our own service and wifi pass with -s
+#   /usr/share/udhcpc/default.script    what udhcpc falls back to when it is run
+#                                       by hand without -s
+# Both are real files, not a symlink: osupdate only carries regular files.
+#
+# udhcpc supplies interface, ip, subnet, router and dns as environment
+# variables; there are no arguments other than the event name.
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
 case "$1" in
   deconfig)
-    ip addr flush dev "$interface"
-    ip link set "$interface" up
+    # Link down or lease dropped: drop the address, keep the interface enabled.
+    ip addr flush dev "$interface" 2>/dev/null
+    ip link set "$interface" up 2>/dev/null
     ;;
   bound|renew)
-    ip addr flush dev "$interface"
-    ip addr add "$ip/${subnet:-255.255.255.0}" dev "$interface"
-    ip link set "$interface" up
-    ip route del default 2>/dev/null || true
+    ip addr flush dev "$interface" 2>/dev/null
+    ip addr add "$ip/${subnet:-255.255.255.0}" dev "$interface" 2>/dev/null
+    ip link set "$interface" up 2>/dev/null
+    # Replace only the default route that belongs to this interface. Deleting
+    # "default" without a device would also remove another NIC's route.
+    ip route del default dev "$interface" 2>/dev/null
     for gateway in $router; do
-      ip route add default via "$gateway" dev "$interface"
+      ip route add default via "$gateway" dev "$interface" 2>/dev/null
       break
     done
-    : > /etc/resolv.conf
-    for server in $dns; do
-      echo "nameserver $server" >> /etc/resolv.conf
-    done
+    # Rewrite the resolver only when the server offered one, and replace the
+    # file atomically: a half-written resolv.conf breaks every lookup that
+    # races with it.
+    if [ -n "${dns:-}" ]; then
+      tmp=/etc/resolv.conf.udhcpc.$$
+      {
+        echo "# written by udhcpc for $interface"
+        for server in $dns; do
+          echo "nameserver $server"
+        done
+      } > "$tmp" 2>/dev/null && mv -f "$tmp" /etc/resolv.conf
+    fi
+    ;;
+  leasefail|nak)
+    # Nothing to undo: deconfig already ran, or the address was never set.
     ;;
 esac
+
+exit 0
