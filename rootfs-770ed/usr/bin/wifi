@@ -6,6 +6,7 @@
 #   wifi connect SSID [PASS]  join a network (WPA/WPA2-PSK, or open/WEP
 #                             when no passphrase is given) and run DHCP
 #   wifi status               driver state, ESSID, access point, address
+#   wifi diag                 iwconfig + security IEs + supplicant log + dmesg
 #   wifi down                 stop wpa_supplicant and take the link down
 #
 # WPA/WPA2-PSK is handled by wpa_supplicant (wext driver, internal TLS);
@@ -13,6 +14,7 @@
 set -u
 PATH=/bin:/sbin:/usr/bin:/usr/sbin
 CONF=/etc/wpa_supplicant/wpa_supplicant.conf
+LOG=/var/log/wpa_supplicant.log
 
 # Every subcommand needs root: "ip link set", "killall wpa_supplicant",
 # "iwlist scan" and udhcpc all need CAP_NET_ADMIN, and $CONF is 0600 root.
@@ -101,7 +103,10 @@ network={
 }
 WCONF
       chmod 0600 "$CONF"
-      wpa_supplicant -B -i "$i" -c "$CONF" || { echo "wifi: wpa_supplicant failed"; exit 1; }
+      mkdir -p /var/log
+      : > "$LOG"
+      wpa_supplicant -B -f "$LOG" -i "$i" -c "$CONF" \
+        || { echo "wifi: wpa_supplicant failed"; tail -n 10 "$LOG" 2>/dev/null; exit 1; }
       echo "wifi: WPA supplicant started on $i, waiting for association ..."
     else
       echo "wifi: no passphrase given -- trying open network"
@@ -111,17 +116,56 @@ WCONF
     # burn its retries and report a failure that is really just a slow b43.
     if wait_assoc "$i" 20; then
       echo "wifi: associated with $ssid"
+      # Association can succeed and the 4-way handshake still fail: the card
+      # then drops the link about a second later and the address never comes.
+      if grep -q "4-Way Handshake failed\|pre-shared key may be incorrect" "$LOG" 2>/dev/null; then
+        echo "wifi: WPA handshake failed after association" >&2
+        echo "        wrong passphrase, or the b43 crypto engine;" >&2
+        echo "        /etc/modprobe.d/b43.conf sets nohwcrypt=1 -- check: wifi diag" >&2
+        tail -n 6 "$LOG" 2>/dev/null | sed 's/^/  /' >&2
+      fi
     else
       echo "wifi: still not associated after 20 s (wrong passphrase? out of range?)" >&2
+      tail -n 8 "$LOG" 2>/dev/null | sed 's/^/  /' >&2
       no_card_hint
     fi
     echo "wifi: requesting DHCP lease ..."
-    udhcpc -n -q -i "$i" || echo "wifi: DHCP failed (try: udhcpc -i $i)"
+    udhcpc -n -q -i "$i" || {
+      echo "wifi: DHCP failed -- no lease. Check the association first:" >&2
+      echo "        iwconfig $i    (want an ESSID, not off/any)" >&2
+      echo "        wifi diag" >&2
+    }
     ;;
   status)
     i=$(iface) || { echo "wifi: no wireless interface"; exit 1; }
     iwconfig "$i" 2>/dev/null
     ip addr show "$i" 2>/dev/null | sed -n '1,4p'
+    ;;
+  diag)
+    echo "=== interface"
+    iface || { echo "  none -- card not inserted, or its driver is not loaded"; no_card_hint; exit 1; }
+    i=$(iface)
+    echo
+    echo "=== iwconfig $i"
+    iwconfig "$i" 2>/dev/null | sed 's/^/  /'
+    echo
+    echo "=== address"
+    ip addr show "$i" 2>/dev/null | sed 's/^/  /'
+    echo
+    echo "=== access points and their security"
+    iwlist "$i" scan 2>/dev/null \
+      | grep -E 'ESSID|Protocol|Group Cipher|Pairwise Ciphers|Authentication Suites|IE: ' \
+      | sed 's/^ *//' | sed 's/^/  /' | head -n 40
+    echo
+    echo "=== driver parameter"
+    v=$(cat /sys/module/b43/parameters/nohwcrypt 2>/dev/null)
+    echo "  nohwcrypt=${v:-?}   (1 = software crypto; see /etc/modprobe.d/b43.conf)"
+    echo
+    echo "=== wpa_supplicant log (tail)"
+    tail -n 12 "$LOG" 2>/dev/null | sed 's/^/  /' || echo "  (no log yet)"
+    echo
+    echo "=== kernel, b43 and cfg80211"
+    dmesg 2>/dev/null | grep -iE 'b43|ssb|cfg80211|wlan0' | tail -n 12 | sed 's/^/  /'
     ;;
   down)
     i=$(iface) || { echo "wifi: no wireless interface"; exit 1; }
@@ -129,5 +173,5 @@ WCONF
     ip link set "$i" down 2>/dev/null
     echo "wifi: $i down"
     ;;
-  *) echo "usage: wifi [scan|connect SSID [PASSPHRASE]|status|down]"; exit 1 ;;
+  *) echo "usage: wifi [scan|connect SSID [PASSPHRASE]|status|diag|down]"; exit 1 ;;
 esac
