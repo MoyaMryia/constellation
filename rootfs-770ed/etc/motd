@@ -4,4 +4,5 @@
   fetch      mark + summary        hwcheck    hardware report
   x          graphical desktop     wifi       scan / connect
   mountusb   USB stick             tcc/make   build C programs
+  mux        detachable sessions   settime    fix the clock (TLS)
 

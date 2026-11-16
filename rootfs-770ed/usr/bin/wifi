@@ -3,14 +3,16 @@
 #
 #   wifi                      scan and list access points
 #   wifi scan                 same
-#   wifi connect SSID [PASS]  join a network (WPA/WPA2-PSK, or open/WEP
-#                             when no passphrase is given) and run DHCP
+#   wifi connect SSID [PASS]  join a network (WPA/WPA2-PSK with a passphrase,
+#                             open network without one) and run DHCP
 #   wifi status               driver state, ESSID, access point, address
 #   wifi diag                 iwconfig + security IEs + supplicant log + dmesg
 #   wifi down                 stop wpa_supplicant and take the link down
 #
-# WPA/WPA2-PSK is handled by wpa_supplicant (wext driver, internal TLS);
-# open/WEP networks use iwconfig. DHCP is done with udhcpc.
+# Both cases go through wpa_supplicant (wext driver, internal TLS): it does the
+# scan and the join itself and records why a join failed. WEP is not handled --
+# edit /etc/wpa_supplicant/wpa_supplicant.conf and add wep_key0 by hand.
+# DHCP is done with udhcpc and the hook in /etc/udhcpc.script.
 set -u
 PATH=/bin:/sbin:/usr/bin:/usr/sbin
 CONF=/etc/wpa_supplicant/wpa_supplicant.conf
@@ -48,13 +50,22 @@ no_card_hint() {
   fi
 }
 
-# Wait until the driver reports an associated ESSID (up to $1 seconds).
+# Wait until the link actually carries traffic (up to $1 seconds).
+# iwconfig prints "ESSID:\"...\"" as soon as the ESSID is set, even when the
+# card never associated -- "Debug" above is exactly that case. The carrier flag
+# is the only honest signal, and DHCP needs it.
 wait_assoc() {
   i=$1; limit=$2; n=0
   while [ "$n" -lt "$limit" ]; do
-    case "$(iwconfig "$i" 2>/dev/null)" in
-      *ESSID:\"*\") return 0 ;;
-    esac
+    if [ "$(cat "/sys/class/net/$i/carrier" 2>/dev/null)" = 1 ]; then
+      return 0
+    fi
+    # Fallback for drivers without a carrier file: require an access point too.
+    if [ ! -e "/sys/class/net/$i/carrier" ]; then
+      case "$(iwconfig "$i" 2>/dev/null)" in
+        *Access\ Point:\ [0-9A-Fa-f]*) return 0 ;;
+      esac
+    fi
     n=$((n + 1))
     /bin/sleep 1
   done
@@ -88,11 +99,17 @@ case $cmd in
     ssid=$2; psk=${3:-}
     i=$(iface) || { echo "wifi: no wireless interface -- is the card inserted?"; no_card_hint; exit 1; }
     ip link set "$i" up 2>/dev/null
-    # A supplicant left over from an earlier connect owns the interface and
-    # would ignore a plain iwconfig. Kill it in both branches.
+    # A supplicant left over from an earlier connect owns the interface.
     killall wpa_supplicant 2>/dev/null
+
+    # One code path for both cases. Joining with "iwconfig essid" used to be the
+    # open-network shortcut, and it fails quietly: the ESSID gets stored, the
+    # card never associates, and the status line reads
+    # ESSID:"Debug"  Access Point: Not-Associated -- with no error anywhere,
+    # because iwconfig's message was sent to /dev/null. wpa_supplicant does the
+    # scan and the join itself and writes down why it failed.
+    mkdir -p /var/run/wpa_supplicant /var/log
     if [ -n "$psk" ]; then
-      mkdir -p /var/run/wpa_supplicant
       cat > "$CONF" <<WCONF
 ctrl_interface=/var/run/wpa_supplicant
 update_config=1
@@ -102,20 +119,31 @@ network={
 	psk="$psk"
 }
 WCONF
-      chmod 0600 "$CONF"
-      mkdir -p /var/log
-      : > "$LOG"
-      wpa_supplicant -B -f "$LOG" -i "$i" -c "$CONF" \
-        || { echo "wifi: wpa_supplicant failed"; tail -n 10 "$LOG" 2>/dev/null; exit 1; }
-      echo "wifi: WPA supplicant started on $i, waiting for association ..."
     else
-      echo "wifi: no passphrase given -- trying open network"
-      iwconfig "$i" essid "$ssid" 2>/dev/null
+      echo "wifi: no passphrase given -- open network (key_mgmt=NONE)"
+      cat > "$CONF" <<WCONF
+ctrl_interface=/var/run/wpa_supplicant
+update_config=1
+
+network={
+	ssid="$ssid"
+	key_mgmt=NONE
+}
+WCONF
     fi
-    # Do not hand out a DHCP request before the card associated: udhcpc would
-    # burn its retries and report a failure that is really just a slow b43.
+    chmod 0600 "$CONF"
+    : > "$LOG"
+    if ! wpa_supplicant -B -f "$LOG" -i "$i" -c "$CONF"; then
+      echo "wifi: wpa_supplicant would not start" >&2
+      tail -n 10 "$LOG" 2>/dev/null | sed 's/^/  /' >&2
+      exit 1
+    fi
+    echo "wifi: supplicant started on $i, waiting for the link ..."
+
+    # DHCP before the carrier is up gets nothing, and on a 266 MHz machine with
+    # firmware loaded on demand that takes a while. Wait for carrier.
     if wait_assoc "$i" 20; then
-      echo "wifi: associated with $ssid"
+      echo "wifi: link up on $i"
       # Association can succeed and the 4-way handshake still fail: the card
       # then drops the link about a second later and the address never comes.
       if grep -q "4-Way Handshake failed\|pre-shared key may be incorrect" "$LOG" 2>/dev/null; then
@@ -125,16 +153,27 @@ WCONF
         tail -n 6 "$LOG" 2>/dev/null | sed 's/^/  /' >&2
       fi
     else
-      echo "wifi: still not associated after 20 s (wrong passphrase? out of range?)" >&2
+      echo "wifi: no carrier on $i after 20 s" >&2
+      echo "        wrong SSID? out of range? 5 GHz-only network? (b43 is 2.4 GHz)" >&2
       tail -n 8 "$LOG" 2>/dev/null | sed 's/^/  /' >&2
       no_card_hint
     fi
+
     echo "wifi: requesting DHCP lease ..."
-    udhcpc -n -q -i "$i" || {
-      echo "wifi: DHCP failed -- no lease. Check the association first:" >&2
-      echo "        iwconfig $i    (want an ESSID, not off/any)" >&2
+    # -s is mandatory: without it udhcpc looks for
+    # /usr/share/udhcpc/default.script. This image shipped no such file until
+    # now, so a lease was obtained and then thrown away -- the interface kept
+    # no address, no route and no resolver, which reads as "DHCP failed".
+    # -t 5 -T 3: five tries, three seconds apart.
+    if udhcpc -n -q -s /etc/udhcpc.script -t 5 -T 3 -i "$i"; then
+      ip addr show "$i" 2>/dev/null | awk '/inet / { print "wifi: address " $2 }'
+      ip route 2>/dev/null | awk '$1 == "default" { print "wifi: gateway " $3 }'
+      awk '/^nameserver/ { print "wifi: dns " $2 }' /etc/resolv.conf 2>/dev/null
+    else
+      echo "wifi: DHCP failed -- no lease. Check the link first:" >&2
+      echo "        cat /sys/class/net/$i/carrier   (want 1)" >&2
       echo "        wifi diag" >&2
-    }
+    fi
     ;;
   status)
     i=$(iface) || { echo "wifi: no wireless interface"; exit 1; }

@@ -109,6 +109,21 @@ chmod 0755 "$DEST/etc/udhcpc.script" "$DEST/usr/share/udhcpc/default.script"
 # X11 桌面（可选）：Xorg + IceWM + xterm + ppp + 字体，来自 Alpine x86 仓库
 # （i386 + musl，与本工程用户空间同 ABI）。见 scripts/alpine-x86-770ed.py。
 ALPINE_VER=${ALPINE_VER:-3.20}
+
+# CA 证书。ccode-cli 用 mbedtls，只会读 /etc/ssl/certs（可用 CCODE_CA_FILE
+# 覆盖）；镜像里的这个目录原来是空的，于是任何 https 请求都报
+# "X509 - Certificate verification failed, e.g. CRL, CA or signature check
+# failed"——看起来像 TLS 坏了，其实是没有任何根证书可信任。
+# Alpine 的 ca-certificates-bundle 只是一份 Mozilla 根证书（118 张，纯数据，
+# 与架构无关），版本与 sha256 钉在 scripts/alpine-x86-770ed.lock 里。
+CERTS=${CERTS:-1}
+if [ "$CERTS" = 1 ]; then
+  ALPINE_VER=$ALPINE_VER python3 "$ROOT/scripts/alpine-x86-770ed.py" install \
+    --root "$DEST" ca-certificates-bundle >/dev/null
+  # 有的程序读 /etc/ssl/cert.pem（Alpine 的约定），有的读 certs/ 下的 bundle。
+  cp "$DEST/etc/ssl/certs/ca-certificates.crt" "$DEST/etc/ssl/cert.pem"
+fi
+
 INSTALL_X=${INSTALL_X:-1}
 if [ "$INSTALL_X" = 1 ]; then
   ALPINE_VER=$ALPINE_VER python3 "$ROOT/scripts/alpine-x86-770ed.py" install \

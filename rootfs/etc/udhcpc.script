@@ -28,6 +28,13 @@ case "$1" in
       ip route add default via "$gateway" dev "$interface" 2>/dev/null
       break
     done
+    # A machine whose CMOS battery is flat boots into 1970. Every certificate
+    # is then "not yet valid" and every https request fails with an X509 error
+    # that looks like a broken TLS stack. There is a network now, so fix the
+    # clock in the background -- ntpd needs no TLS and no correct date.
+    if [ "$(date +%Y 2>/dev/null || echo 1970)" -lt 2024 ] 2>/dev/null; then
+      ( settime >/dev/null 2>&1 & )
+    fi
     # Rewrite the resolver only when the server offered one, and replace the
     # file atomically: a half-written resolv.conf breaks every lookup that
     # races with it.

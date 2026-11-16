@@ -1,0 +1,65 @@
+#!/bin/sh
+# settime -- put the clock roughly right, so TLS can work.
+#
+# A certificate is only valid between two dates. If the CMOS battery is flat
+# the 770ED boots into 1970, every chain "not yet valid", and every https
+# request fails with "X509 - Certificate verification failed ... check the
+# system clock". Nothing about the TLS library or the CA bundle is wrong.
+#
+#   settime              read the RTC, then ask NTP if the result is still off
+#   settime 2026-11-16 20:30   set the clock by hand
+#
+# Exit status: 0 when the year now looks usable (>= 2024), 1 otherwise.
+set -u
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
+OK_YEAR=2024
+NTP_SERVERS=${NTP_SERVERS:-"pool.ntp.org time.cloudflare.com"}
+
+year() { date +%Y 2>/dev/null || echo 1970; }
+
+usable() { [ "$1" -ge "$OK_YEAR" ] 2>/dev/null; }
+
+if [ $# -ge 1 ]; then
+  # Hand-set: "settime 2026-11-16 20:30" or "settime 2026-11-16T20:30:00"
+  stamp=$(echo "$@" | tr 'T' ' ')
+  if date -s "$stamp" >/dev/null 2>&1; then
+    hwclock -w >/dev/null 2>&1 || true
+    echo "settime: clock set to $(date)"
+    exit 0
+  fi
+  echo "settime: could not parse '$*' (use: settime 2026-11-16 20:30)" >&2
+  exit 1
+fi
+
+# 1. The RTC knows the time if the battery is alive.
+hwclock -s >/dev/null 2>&1 || true
+now=$(year)
+if usable "$now"; then
+  echo "settime: clock read from the RTC: $(date)"
+  exit 0
+fi
+
+# 2. RTC is empty or wrong. NTP needs no TLS and no correct clock.
+have_iface=0
+for d in /sys/class/net/*; do
+  n=${d##*/}
+  [ "$n" = lo ] && continue
+  [ "$(cat "$d/carrier" 2>/dev/null)" = 1 ] && { have_iface=1; break; }
+done
+if [ "$have_iface" = 1 ]; then
+  for s in $NTP_SERVERS; do
+    echo "settime: asking $s ..."
+    if ntpd -q -n -p "$s" >/dev/null 2>&1; then
+      hwclock -w >/dev/null 2>&1 || true
+      echo "settime: clock set from $s: $(date)"
+      exit 0
+    fi
+  done
+fi
+
+echo "settime: clock still reads $(date)" >&2
+echo "         TLS will fail until it is fixed. Either plug in a network and" >&2
+echo "         run 'settime' again, or set it by hand:" >&2
+echo "           settime 2026-11-16 20:30" >&2
+exit 1
